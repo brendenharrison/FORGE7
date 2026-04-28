@@ -1,6 +1,7 @@
 #include "PluginSlot.h"
 
 #include "../Scene/ChainVariation.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
@@ -17,7 +18,11 @@ void PluginSlot::prepareToPlay(double sampleRate, int maximumExpectedSamplesPerB
     rtProcessorPtr.store(nullptr, std::memory_order_release);
 
     if (hostedInstance != nullptr)
+    {
+        Logger::info("FORGE7 PlayablePreset: slot prepareToPlay name=\"" + hostedInstance->getName()
+                     + "\" sr=" + juce::String(sampleRate, 1) + " block=" + juce::String(maximumExpectedSamplesPerBlock));
         hostedInstance->prepareToPlay(sampleRate, maximumExpectedSamplesPerBlock);
+    }
 
     syncRtProcessorPointer();
 }
@@ -54,6 +59,7 @@ void PluginSlot::processMonoBlock(float* monoInOut,
     float* channelPointers[1] = { monoInOut };
     juce::AudioBuffer<float> audioBuffer(channelPointers, 1, numSamples);
     midiScratch.clear();
+    processBlockCallCount.fetch_add(1, std::memory_order_relaxed);
     proc->processBlock(audioBuffer, midiScratch);
 }
 
@@ -100,9 +106,13 @@ void PluginSlot::assignHostedPlugin(std::unique_ptr<juce::AudioPluginInstance> i
     releaseResources();
     hostedInstance = std::move(instance);
     syncMetadataFromDescription(description);
+    processBlockCallCount.store(0, std::memory_order_relaxed);
 
     if (hostedInstance != nullptr)
     {
+        Logger::info("FORGE7 PlayablePreset: slot assignHostedPlugin name=\"" + hostedInstance->getName()
+                     + "\" format=\"" + description.pluginFormatName
+                     + "\" fileOrIdentifier=\"" + description.fileOrIdentifier + "\"");
         // Future: optional editor attachment (not enabled in FORGE V1).
         hostedInstance->enableAllBuses();
 
@@ -123,6 +133,8 @@ void PluginSlot::assignHostedPlugin(std::unique_ptr<juce::AudioPluginInstance> i
         }
 
         hostedInstance->prepareToPlay(sampleRate, maximumExpectedSamplesPerBlock);
+        Logger::info("FORGE7 PlayablePreset: slot assigned and prepared name=\"" + hostedInstance->getName()
+                     + "\" sr=" + juce::String(sampleRate, 1) + " block=" + juce::String(maximumExpectedSamplesPerBlock));
     }
 
     syncRtProcessorPointer();

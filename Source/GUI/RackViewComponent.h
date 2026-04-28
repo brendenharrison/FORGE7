@@ -108,6 +108,10 @@ private:
     juce::TextButton navScenesButton;
     juce::TextButton settingsButton { "Settings" };
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    juce::TextButton simHwButton { "Sim HW" };
+#endif
+
     bool inspectorExpanded { false };
 
     std::unique_ptr<juce::Component> browserOverlay;

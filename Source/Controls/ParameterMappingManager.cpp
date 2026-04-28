@@ -262,7 +262,16 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
     }
 
     if (! foundMapping)
+    {
+        if (event.source == HardwareControlSource::SimulatedGui && isKnobId(event.id))
+        {
+            static int noMapEvery = 0;
+            if ((++noMapEvery % 20) == 0)
+                Logger::info("FORGE7 SimHW: no mapping for knob id=" + juce::String((int)event.id)
+                             + " sceneId=" + sceneId + " variationId=" + variationId);
+        }
         return;
+    }
 
     auto* chain = pluginHostManager.getPluginChain();
 
@@ -293,6 +302,13 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
 
     if (event.type == HardwareControlType::AbsoluteNormalized)
     {
+        if (event.source == HardwareControlSource::SimulatedGui && isKnobId(event.id))
+        {
+            static int applyEvery = 0;
+            if ((++applyEvery % 12) == 0)
+                Logger::info("FORGE7 SimHW: apply knob to param display=\"" + mapping.displayName
+                             + "\" slot=" + juce::String(mapping.pluginSlotIndex) + " value=" + juce::String(event.value, 3));
+        }
         applyNormalizedToParameter(*param, mapping, event.value);
         return;
     }

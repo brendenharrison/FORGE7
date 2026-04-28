@@ -10,7 +10,9 @@
 #include "../App/MainComponent.h"
 #include "../Audio/AudioEngine.h"
 #include "../PluginHost/PluginHostManager.h"
+#include "../PluginHost/PluginSlot.h"
 #include "../Scene/SceneManager.h"
+#include "../Utilities/Logger.h"
 #include "CpuMeter.h"
 #include "PluginBrowserComponent.h"
 #include "PluginInspectorComponent.h"
@@ -286,6 +288,17 @@ RackViewComponent::RackViewComponent(AppContext& context)
     styleLargeTextButton(settingsButton);
     addAndMakeVisible(settingsButton);
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    styleLargeTextButton(simHwButton);
+    simHwButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    simHwButton.onClick = [this]()
+    {
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->toggleSimulatedControlsPanel();
+    };
+    addAndMakeVisible(simHwButton);
+#endif
+
     browserOverlay = std::make_unique<RackBrowserBackdrop>();
     browserOverlay->setAlwaysOnTop(true);
     browserOverlay->setVisible(false);
@@ -363,6 +376,11 @@ void RackViewComponent::resized()
 
     editModeBadge.setBounds(statusArea.removeFromRight(110).reduced(0, 4));
     statusArea.removeFromRight(8);
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    simHwButton.setBounds(statusArea.removeFromRight(92).reduced(0, 4));
+    statusArea.removeFromRight(8);
+#endif
 
     const int varW = juce::jmin(200, juce::jmax(100, statusArea.getWidth() / 4));
     variationLabel.setBounds(statusArea.removeFromRight(varW));
@@ -466,6 +484,18 @@ void RackViewComponent::timerCallback()
 
     if (appContext.audioEngine != nullptr)
         globalBypassFxToggle.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
+
+    // Playable Preset validation: confirm Slot 1 is actually processing blocks (no RT logging).
+    static uint64_t lastSlot0ProcessCount = 0;
+    if (appContext.pluginHostManager != nullptr)
+        if (auto* chain = appContext.pluginHostManager->getPluginChain())
+            if (auto* slot = chain->getSlot(static_cast<size_t>(0)))
+            {
+                const uint64_t n = slot->getProcessBlockCallCount();
+                if (n != lastSlot0ProcessCount && n > 0 && (n % 200) == 0)
+                    Logger::info("FORGE7 PlayablePreset: slot 0 processBlock calls=" + juce::String((juce::int64)n));
+                lastSlot0ProcessCount = n;
+            }
 }
 
 void RackViewComponent::refreshSlotDisplays()
@@ -736,14 +766,20 @@ bool RackViewComponent::loadPluginIntoSelectedSlot(const juce::PluginDescription
 
     juce::String err;
 
+    Logger::info("FORGE7 PlayablePreset: RackView loadPluginIntoSelectedSlot slot=" + juce::String(selectedSlotIndex)
+                 + " name=\"" + desc.name + "\" format=\"" + desc.pluginFormatName + "\"");
+
     if (appContext.pluginHostManager->loadPluginIntoSlotSynchronously(desc, selectedSlotIndex, err))
     {
+        Logger::info("FORGE7 PlayablePreset: plugin load+assign OK slot=" + juce::String(selectedSlotIndex));
         refreshSlotDisplays();
         return true;
     }
 
     const juce::String msg =
         err.isNotEmpty() ? err : juce::String("Could not load this plugin. Check install and format.");
+
+    Logger::warn("FORGE7 PlayablePreset: plugin load failed slot=" + juce::String(selectedSlotIndex) + " err=" + msg);
 
     if (pluginBrowser != nullptr)
         pluginBrowser->setLoadErrorMessage(msg);

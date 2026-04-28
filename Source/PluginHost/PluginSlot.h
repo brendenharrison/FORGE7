@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstdint>
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
@@ -75,6 +76,9 @@ public:
 
     juce::AudioPluginInstance* getHostedInstance() noexcept { return hostedInstance.get(); }
 
+    /** Debug/validation: increments when this slot calls AudioProcessor::processBlock (audio thread). */
+    uint64_t getProcessBlockCallCount() const noexcept { return processBlockCallCount.load(std::memory_order_relaxed); }
+
 private:
     void syncMetadataFromDescription(const juce::PluginDescription& desc);
     void syncRtProcessorPointer() noexcept;
@@ -90,6 +94,8 @@ private:
     std::atomic<bool> bypassAtomic { false };
 
     std::atomic<juce::AudioProcessor*> rtProcessorPtr { nullptr };
+
+    std::atomic<uint64_t> processBlockCallCount { 0 };
 
     std::unique_ptr<juce::AudioPluginInstance> hostedInstance;
 

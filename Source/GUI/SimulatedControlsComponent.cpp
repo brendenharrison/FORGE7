@@ -8,6 +8,7 @@
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
 #include "../Storage/ProjectSerializer.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
@@ -214,6 +215,19 @@ void SimulatedControlsComponent::emitKnob(const HardwareControlId id, const floa
     lastEmittedId = id;
     lastEmittedValue = e.value;
     lastEmittedExtra = {};
+
+    // Dev-only: tracing for simulated control input.
+    static float lastLogged[4] = { -1.0f, -1.0f, -1.0f, -1.0f };
+    const int kidx = knobIndexFromId(id);
+    if (kidx >= 0 && kidx < 4)
+    {
+        const float prev = lastLogged[kidx];
+        if (prev < 0.0f || std::abs(prev - e.value) >= 0.02f)
+        {
+            lastLogged[kidx] = e.value;
+            Logger::info("FORGE7 SimHW: K" + juce::String(kidx + 1) + " moved value=" + juce::String(e.value, 3));
+        }
+    }
 
     appContext.controlManager->submitHardwareEvent(e);
 }

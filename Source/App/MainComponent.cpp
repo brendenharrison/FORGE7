@@ -6,8 +6,10 @@
 #include "../GUI/FullscreenPluginEditorComponent.h"
 #include "../GUI/PerformanceViewComponent.h"
 #include "../GUI/RackViewComponent.h"
+#include "../GUI/SimulatedControlsComponent.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
@@ -55,6 +57,25 @@ MainComponent::MainComponent(AppContext& context)
     addChildComponent(*rackView);
     addAndMakeVisible(encoderNavigator);
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    // In-app simulated controls drawer (fallback when DevToolsWindow is not visible).
+    simulatedControlsDrawer.setAlwaysOnTop(true);
+    simulatedControlsDrawer.setVisible(false);
+    simulatedControlsDrawer.setInterceptsMouseClicks(true, true);
+    addChildComponent(simulatedControlsDrawer);
+
+    simulatedControlsHideButton.onClick = [this]() { hideSimulatedControlsPanel(); };
+    simulatedControlsDrawer.addAndMakeVisible(simulatedControlsHideButton);
+
+    simulatedControlsPanel = std::make_unique<SimulatedControlsComponent>(appContext);
+    simulatedControlsViewport = std::make_unique<juce::Viewport>();
+    simulatedControlsViewport->setScrollBarsShown(true, false);
+    simulatedControlsViewport->setViewedComponent(simulatedControlsPanel.get(), false);
+    simulatedControlsDrawer.addAndMakeVisible(*simulatedControlsViewport);
+
+    Logger::info("FORGE7 SimHW: in-app drawer available (FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=1).");
+#endif
+
     setEditMode(false);
 }
 
@@ -90,11 +111,63 @@ void MainComponent::resized()
 
     encoderNavigator.setBounds(bounds);
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    if (simulatedControlsDrawer.isVisible())
+    {
+        const int w = juce::jlimit(320, 380, juce::roundToInt((float)getWidth() * 0.30f));
+        auto drawerArea = bounds.removeFromRight(w);
+
+        simulatedControlsDrawer.setBounds(drawerArea);
+        simulatedControlsDrawer.toFront(false);
+
+        auto inner = simulatedControlsDrawer.getLocalBounds().reduced(10);
+        auto topRow = inner.removeFromTop(34);
+        simulatedControlsHideButton.setBounds(topRow.removeFromRight(92).reduced(0, 4));
+        inner.removeFromTop(6);
+
+        if (simulatedControlsViewport != nullptr)
+            simulatedControlsViewport->setBounds(inner);
+    }
+    else
+    {
+        simulatedControlsDrawer.setBounds({});
+    }
+#endif
+
     if (performanceView != nullptr)
         performanceView->syncEncoderFocus();
     if (rackView != nullptr)
         rackView->syncEncoderFocus();
 }
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+void MainComponent::toggleSimulatedControlsPanel()
+{
+    if (simulatedControlsPanelVisible)
+        hideSimulatedControlsPanel();
+    else
+        showSimulatedControlsPanel();
+}
+
+void MainComponent::showSimulatedControlsPanel()
+{
+    simulatedControlsPanelVisible = true;
+    simulatedControlsDrawer.setVisible(true);
+    simulatedControlsDrawer.toFront(true);
+    resized();
+
+    Logger::info("FORGE7 SimHW: showing in-app drawer bounds=" + simulatedControlsDrawer.getBounds().toString());
+}
+
+void MainComponent::hideSimulatedControlsPanel()
+{
+    simulatedControlsPanelVisible = false;
+    simulatedControlsDrawer.setVisible(false);
+    resized();
+
+    Logger::info("FORGE7 SimHW: hiding in-app drawer");
+}
+#endif
 
 void MainComponent::setEditMode(const bool shouldShowRackEditor)
 {
@@ -214,6 +287,11 @@ juce::String MainComponent::describeUiSurfaceForDevTools() const
 {
     if (fullscreenPluginEditor != nullptr)
         return "Fullscreen Plugin Editor";
+
+ #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    if (simulatedControlsPanelVisible)
+        return (editMode ? "Edit Mode / Rack View" : "Performance Mode") + juce::String(" (Sim HW drawer)");
+ #endif
 
     if (rackView != nullptr && rackView->isPluginBrowserVisible())
         return "Plugin Browser (fullscreen)";

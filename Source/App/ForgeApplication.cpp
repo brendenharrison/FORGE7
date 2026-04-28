@@ -35,6 +35,33 @@ namespace forge7
 {
 namespace
 {
+juce::Rectangle<int> chooseDevToolsBounds(const juce::Rectangle<int>& mainBounds)
+{
+    const auto& displays = juce::Desktop::getInstance().getDisplays();
+    const auto* disp = displays.getDisplayForRect(mainBounds);
+    if (disp == nullptr)
+        disp = displays.getPrimaryDisplay();
+
+    if (disp == nullptr)
+        return juce::Rectangle<int>(40, 40, 420, 640);
+
+    const juce::Rectangle<int> user = disp->userArea;
+
+    const int w = 420;
+    const int h = juce::jlimit(240, 820, juce::jmin(820, user.getHeight() - 80));
+
+    const int gap = 12;
+    const auto mb = mainBounds.isEmpty() ? juce::Rectangle<int>(user.getCentreX() - 512, user.getCentreY() - 300, 1024, 600)
+                                         : mainBounds;
+    juce::Rectangle<int> desired(mb.getRight() + gap, mb.getY(), w, h);
+
+    // Prefer to the right of main if it fits; otherwise center on the display.
+    if (!user.contains(desired))
+        desired = juce::Rectangle<int>(w, h).withCentre(user.getCentre());
+
+    return desired.constrainedWithin(user.reduced(4));
+}
+
 /** Thin DocumentWindow shell that forwards close to application quit. */
 class ForgeMainWindow final : public juce::DocumentWindow
 {
@@ -119,15 +146,13 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     }
     // #endregion
 
-    devToolsWindow = std::make_unique<DevToolsWindow>(appContext);
-
-    if (mainWindow != nullptr && devToolsWindow != nullptr)
+    appContext.showSimulatedHardwareWindow = [this]()
     {
-        devToolsWindow->centreAroundComponent(mainWindow.get(),
-                                              devToolsWindow->getWidth(),
-                                              devToolsWindow->getHeight());
-        devToolsWindow->toFront(true);
-    }
+        showSimulatedHardwareWindow();
+    };
+
+    devToolsWindow = std::make_unique<DevToolsWindow>(appContext);
+    showSimulatedHardwareWindow();
 
     // #region agent log
     if (devToolsWindow != nullptr)
@@ -167,7 +192,7 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
         devToolsWindow->toFront(true);
 #endif
 
-    juce::MessageManager::callAsync([mainWin = mainWindow.get(), devWin = devToolsWindow.get()]
+    juce::MessageManager::callAsync([mainWin = mainWindow.get(), devWin = devToolsWindow.get(), this]
                                    {
                                        if (mainWin != nullptr)
                                            mainWin->toFront(true);
@@ -175,6 +200,8 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                        /** Main window grabbed focus above; raise dev tools again (or use AlwaysOnTop). */
                                        if (devWin != nullptr)
                                        {
+                                           // Finder-launch safety: re-assert bounds/visibility on message loop.
+                                           showSimulatedHardwareWindow();
                                            devWin->toFront(true);
                                            // #region agent log
                                            {
@@ -196,9 +223,35 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                    });
 }
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+void ForgeApplication::showSimulatedHardwareWindow()
+{
+    if (devToolsWindow == nullptr)
+    {
+        devToolsWindow = std::make_unique<DevToolsWindow>(appContext);
+        Logger::info("FORGE7 SimHW: DevToolsWindow created");
+    }
+
+    if (devToolsWindow == nullptr)
+        return;
+
+    const auto mainBounds = (mainWindow != nullptr) ? mainWindow->getBounds() : juce::Rectangle<int>();
+    devToolsWindow->setBounds(chooseDevToolsBounds(mainBounds));
+
+    devToolsWindow->setAlwaysOnTop(true);
+    devToolsWindow->setVisible(true);
+    devToolsWindow->setMinimised(false);
+    devToolsWindow->toFront(true);
+
+    Logger::info("FORGE7 SimHW: DevToolsWindow visible=" + juce::String(devToolsWindow->isVisible() ? "true" : "false")
+                 + " bounds=" + devToolsWindow->getBounds().toString());
+}
+#endif
+
 void ForgeApplication::shutdown()
 {
     appContext.appConfig = nullptr;
+    appContext.showSimulatedHardwareWindow = nullptr;
     devToolsWindow.reset();
     mainWindow.reset();
     projectSerializer.reset();

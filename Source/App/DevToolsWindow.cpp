@@ -21,7 +21,7 @@ DevToolsWindow::DevToolsWindow(AppContext& context)
     setUsingNativeTitleBar(true);
     setResizable(true, true);
     setContentOwned(new SimulatedControlsComponent(context), true);
-    centreWithSize(kDefaultW, kDefaultH);
+    setSize(kDefaultW, kDefaultH);
     /** Stay above the main FORGE window so startup `toFront` calls do not hide this panel. */
     setAlwaysOnTop(true);
     setVisible(true);

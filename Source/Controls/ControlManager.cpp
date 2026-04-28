@@ -6,6 +6,7 @@
 #include "MidiControlInput.h"
 
 #include "../PluginHost/PluginHostManager.h"
+#include "../Utilities/Logger.h"
 #include "../Scene/SceneManager.h"
 #include "ParameterMappingManager.h"
 
@@ -143,6 +144,15 @@ void ControlManager::submitHardwareEvent(HardwareControlEvent event)
 
     // Always safe: atomics only, safe from MIDI / serial threads.
     applyEventToState(event);
+
+    // Dev-only: trace simulated GUI events (throttled).
+    if (event.source == HardwareControlSource::SimulatedGui)
+    {
+        static int every = 0;
+        if ((++every % 12) == 0)
+            Logger::info("FORGE7 SimHW: ControlManager received id=" + juce::String((int)event.id)
+                         + " type=" + juce::String((int)event.type) + " value=" + juce::String(event.value, 3));
+    }
 
     /** Mapping, scene hydration, and listeners require the message thread - bundle so order is fixed. */
     auto deliver = [this, event]()

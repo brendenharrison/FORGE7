@@ -40,6 +40,11 @@ private:
     juce::TextButton chainNextButton { "Var +" };
     juce::TextButton settingsButton { "Settings" };
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    juce::TextButton simHwButton { "Sim HW" };
+    juce::Label simHwHintLabel;
+#endif
+
     juce::Label bpmStatusLabel;
     CpuMeter cpuMeter;
 

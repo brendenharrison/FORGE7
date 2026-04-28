@@ -1,6 +1,7 @@
 #include "PluginChain.h"
 
 #include "PluginSlot.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
@@ -107,6 +108,7 @@ bool PluginChain::removePluginFromSlot(int slotIndex)
     jassert(slot != nullptr);
 
     // Future VST3: unload editor if open; delete Editor; async free library if ref-count hits zero.
+    Logger::info("FORGE7 PlayablePreset: removePluginFromSlot slot=" + juce::String(slotIndex));
     slot->clearSlotContent();
     return true;
 }
@@ -136,7 +138,11 @@ void PluginChain::bypassSlot(int slotIndex, bool shouldBypass)
         return;
 
     if (auto* slot = slots[static_cast<size_t>(slotIndex)].get())
+    {
         slot->setBypass(shouldBypass);
+        Logger::info("FORGE7 PlayablePreset: bypassSlot slot=" + juce::String(slotIndex)
+                     + " bypass=" + juce::String(shouldBypass ? "true" : "false"));
+    }
 }
 
 void PluginChain::clearChain()
@@ -163,6 +169,8 @@ bool PluginChain::assignPluginToSlot(int slotIndex,
     if (slot == nullptr || instance == nullptr)
         return false;
 
+    Logger::info("FORGE7 PlayablePreset: assignPluginToSlot slot=" + juce::String(slotIndex)
+                 + " name=\"" + description.name + "\" format=\"" + description.pluginFormatName + "\"");
     slot->assignHostedPlugin(std::move(instance), description, sampleRate, maximumSamplesPerBlock);
     return true;
 }

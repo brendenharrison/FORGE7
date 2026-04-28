@@ -162,6 +162,22 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     styleToolbarButton(chainNextButton);
     styleToolbarButton(settingsButton);
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    styleToolbarButton(simHwButton);
+    simHwButton.onClick = [this]()
+    {
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->toggleSimulatedControlsPanel();
+    };
+    addAndMakeVisible(simHwButton);
+
+    simHwHintLabel.setJustificationType(juce::Justification::centredLeft);
+    simHwHintLabel.setFont(juce::Font(12.0f));
+    simHwHintLabel.setColour(juce::Label::textColourId, perfMuted());
+    simHwHintLabel.setText("Sim HW: use in-app drawer for K1-K4 / assigns / chain / encoder", juce::dontSendNotification);
+    addAndMakeVisible(simHwHintLabel);
+#endif
+
     rackEditButton.onClick = [this]()
     {
         if (auto* main = findParentComponentOfClass<MainComponent>())
@@ -410,11 +426,21 @@ void PerformanceViewComponent::resized()
     top.removeFromLeft(8);
     settingsButton.setBounds(top.removeFromLeft(primaryBtn));
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    top.removeFromLeft(8);
+    simHwButton.setBounds(top.removeFromLeft(juce::jmin(92, primaryBtn + 18)));
+#endif
+
     top.removeFromLeft(juce::jmax(12, top.getWidth() / 10));
 
     const int statW = juce::jmin(104, juce::jmax(76, top.getWidth() / 6));
     bpmStatusLabel.setBounds(top.removeFromRight(statW));
     cpuMeter.setBounds(top.removeFromRight(statW).reduced(2, 0));
+
+ #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    // Small dev hint under top bar, left aligned with content.
+    simHwHintLabel.setBounds(r.removeFromTop(18).reduced(12, 0));
+ #endif
 
     auto bottomArea = r.removeFromBottom(bottomHud);
     audioHealthMonitor.setBounds(bottomArea.reduced(12, 4));

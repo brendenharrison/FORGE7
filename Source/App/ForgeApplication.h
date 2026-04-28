@@ -36,6 +36,9 @@ public:
     void shutdown() override;
     void systemRequestedQuit() override;
 
+    /** Desktop dev-only: show/raise the simulated hardware window (no-op if disabled at compile time). */
+    void showSimulatedHardwareWindow();
+
 private:
     AppContext appContext {};
     std::unique_ptr<PluginHostManager> pluginHostManager;

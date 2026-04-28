@@ -1,5 +1,7 @@
 #pragma once
 
+#include <functional>
+
 namespace forge7
 {
 
@@ -35,6 +37,9 @@ struct AppContext
 
     /** Root shell - set by `MainComponent` for dev tools / simulated hardware UI. Message thread only. */
     MainComponent* mainComponent = nullptr;
+
+    /** Desktop dev-only: raise/reopen the simulated hardware window (if enabled). */
+    std::function<void()> showSimulatedHardwareWindow;
 };
 
 } // namespace forge7

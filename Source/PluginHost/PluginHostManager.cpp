@@ -470,6 +470,9 @@ bool PluginHostManager::assignInstanceToSlotMessageThread(std::unique_ptr<juce::
 
     jassert(chain != nullptr);
 
+    Logger::info("FORGE7 PlayablePreset: assignInstanceToSlotMessageThread slot=" + juce::String(slotIndex)
+                 + " sr=" + juce::String(sr, 1) + " block=" + juce::String(bs));
+
     if (! chain->assignPluginToSlot(slotIndex, std::move(instance), description, sr, bs))
     {
         errorOut = "Could not assign plugin instance to chain slot";
@@ -575,6 +578,10 @@ bool PluginHostManager::loadPluginIntoSlotSynchronously(const juce::PluginDescri
         bs = lastBlockSize;
     }
 
+    Logger::info("FORGE7 PlayablePreset: loadPluginIntoSlotSynchronously slot=" + juce::String(slotIndex)
+                 + " name=\"" + description.name + "\" format=\"" + description.pluginFormatName
+                 + "\" fileOrIdentifier=\"" + description.fileOrIdentifier + "\"");
+
     juce::String instantiationError;
 
     auto instance = formatManager.createPluginInstance(description,
@@ -590,6 +597,9 @@ bool PluginHostManager::loadPluginIntoSlotSynchronously(const juce::PluginDescri
 
         return false;
     }
+
+    Logger::info("FORGE7 PlayablePreset: plugin instantiated OK slot=" + juce::String(slotIndex)
+                 + " name=\"" + instance->getName() + "\"");
 
     return assignInstanceToSlotMessageThread(std::move(instance), description, slotIndex, errorMessageOut);
 }

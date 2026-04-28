@@ -490,6 +490,9 @@ void PluginBrowserComponent::confirmRow(const int visibleRowIndex)
 
     const juce::PluginDescription desc(allDescriptions.getReference(descriptionIndex));
 
+    Logger::info("FORGE7 PlayablePreset: plugin chosen name=\"" + desc.name + "\" format=\"" + desc.pluginFormatName
+                 + "\" mfg=\"" + desc.manufacturerName + "\" fileOrIdentifier=\"" + desc.fileOrIdentifier + "\"");
+
     if (onPluginChosen != nullptr)
         onPluginChosen(desc);
 }
