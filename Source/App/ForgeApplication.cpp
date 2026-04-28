@@ -27,9 +27,6 @@
  *
  * TODO: consolidate with a single FORGE7_PRODUCT_BUILD CMake option for Linux kiosk.
  */
-#ifndef FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
-#define FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW 1
-#endif
 
 namespace forge7
 {
@@ -100,6 +97,12 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     // #endregion
 
     Logger::info("Starting FORGE 7 core services (stub). Args: " + commandLineParameters);
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    Logger::info("FORGE7 SimHW: compile flag enabled (FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=1)");
+#else
+    Logger::info("FORGE7 SimHW: compile flag disabled (FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=0)");
+#endif
 
     appConfig = std::make_unique<AppConfig>();
 

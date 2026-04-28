@@ -6,6 +6,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Desktop/dev-only helpers.
+option(FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+       "Enable simulated hardware controls for desktop development"
+       ON)
+
 add_subdirectory(Source)
 
 include(FetchContent)
@@ -49,6 +54,7 @@ target_compile_definitions(Forge7 PRIVATE
     JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}"
     # Required for VST3 format registration in AudioPluginFormatManager::addDefaultFormats().
     JUCE_PLUGINHOST_VST3=1
+    FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=$<BOOL:${FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW}>
 )
 
 # Optional dev-only guard: ensure no non-ASCII characters exist in Source/ (prevents mojibake regressions).
