@@ -66,6 +66,19 @@ void RackSlotCard::setSelected(const bool isSelected) noexcept
     repaint();
 }
 
+void RackSlotCard::setShowInlineControls(const bool show) noexcept
+{
+    showInlineControls = show;
+
+    if (!show)
+    {
+        bypassButton.setVisible(false);
+        removeButton.setVisible(false);
+    }
+
+    syncLabelsFromInfo();
+}
+
 void RackSlotCard::refreshFromSlotInfo(const SlotInfo& info)
 {
     lastInfo = info;
@@ -105,9 +118,11 @@ void RackSlotCard::syncLabelsFromInfo()
                            juce::dontSendNotification);
     }
 
-    removeButton.setVisible(! lastInfo.isEmpty || lastInfo.missingPlugin || lastInfo.isPlaceholder);
-
-    bypassButton.setVisible(! lastInfo.isEmpty || lastInfo.isPlaceholder || lastInfo.missingPlugin);
+    if (showInlineControls)
+    {
+        removeButton.setVisible(!lastInfo.isEmpty || lastInfo.missingPlugin || lastInfo.isPlaceholder);
+        bypassButton.setVisible(!lastInfo.isEmpty || lastInfo.isPlaceholder || lastInfo.missingPlugin);
+    }
 }
 
 void RackSlotCard::paint(juce::Graphics& g)

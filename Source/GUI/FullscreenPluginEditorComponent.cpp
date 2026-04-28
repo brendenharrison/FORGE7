@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "../App/AppContext.h"
+#include "../Audio/AudioEngine.h"
+#include "CpuMeter.h"
 #include "../Controls/EncoderFocusTypes.h"
 #include "../Controls/EncoderNavigator.h"
 #include "../Controls/HardwareControlTypes.h"
@@ -59,6 +61,20 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
     addAndMakeVisible(backButton);
 
+    closeButton.onClick = [this]()
+    {
+        if (onClose != nullptr)
+            onClose();
+    };
+
+    addAndMakeVisible(closeButton);
+
+    if (appContext.audioEngine != nullptr)
+    {
+        cpuMeter = std::make_unique<CpuMeter>(appContext.audioEngine);
+        addAndMakeVisible(*cpuMeter);
+    }
+
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(18.0f));
     titleLabel.setColour(juce::Label::textColourId, text());
@@ -91,7 +107,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     assignHintLabel.setVisible(false);
     addAndMakeVisible(assignHintLabel);
 
-    parameterList.setRowHeight(36);
+    parameterList.setRowHeight(40);
     parameterList.setColour(juce::ListBox::backgroundColourId, panel().brighter(0.04f));
     parameterList.setMultipleSelectionEnabled(false);
     parameterList.setVisible(false);
@@ -191,19 +207,32 @@ void FullscreenPluginEditorComponent::resized()
 {
     auto area = getLocalBounds().reduced(10, 8);
 
-    auto top = area.removeFromTop(44);
-    backButton.setBounds(top.removeFromLeft(88).reduced(0, 4));
-    top.removeFromLeft(10);
-    assignModeToggle.setBounds(top.removeFromRight(140).reduced(0, 4));
-    titleLabel.setBounds(top.removeFromRight(juce::jmax(120, top.getWidth() / 2)));
-    sceneVarLabel.setBounds(top);
+    auto top = area.removeFromTop(48);
+    backButton.setBounds(top.removeFromLeft(80).reduced(0, 4));
+    top.removeFromLeft(8);
+    assignModeToggle.setBounds(top.removeFromRight(142).reduced(0, 4));
+    top.removeFromRight(8);
+
+    if (cpuMeter != nullptr)
+    {
+        cpuMeter->setBounds(top.removeFromRight(92).reduced(0, 4));
+        top.removeFromRight(8);
+    }
+
+    const int sceneW = juce::jmin(260, juce::jmax(160, top.getWidth() / 2));
+    sceneVarLabel.setBounds(top.removeFromRight(sceneW).reduced(0, 2));
+    top.removeFromRight(8);
+    titleLabel.setBounds(top);
 
     area.removeFromTop(8);
 
-    auto bottom = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 92);
+    auto bottom = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
 
     auto strip = bottom.removeFromBottom(72).reduced(0, 4);
-    const int sixth = juce::jmax(80, strip.getWidth() / 6);
+    closeButton.setBounds(strip.removeFromRight(96).reduced(4, 4));
+    strip.removeFromRight(6);
+
+    const int sixth = juce::jmax(72, strip.getWidth() / 6);
 
     for (int i = 0; i < 4; ++i)
         knobMappingLabels[static_cast<size_t>(i)].setBounds(strip.removeFromLeft(sixth).reduced(4, 0));
@@ -303,11 +332,17 @@ void FullscreenPluginEditorComponent::paintListBoxItem(const int rowNumber,
     auto r = juce::Rectangle<int>(0, 0, width, height).toFloat().reduced(4.0f);
 
     if (rowIsSelected)
-        g.setColour(accent().withAlpha(0.35f));
+    {
+        g.setColour(accent().withAlpha(0.42f));
+        g.fillRoundedRectangle(r, 6.0f);
+        g.setColour(accent().brighter(0.15f));
+        g.drawRoundedRectangle(r, 6.0f, 2.0f);
+    }
     else
+    {
         g.setColour(panel().brighter(0.06f));
-
-    g.fillRoundedRectangle(r, 6.0f);
+        g.fillRoundedRectangle(r, 6.0f);
+    }
 
     g.setColour(text());
     g.setFont(15.0f);
@@ -379,6 +414,8 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
                               parameterList.scrollToEnsureRowIsOnscreen(r);
                           } });
     }
+
+    items.push_back({ &closeButton, [this]() { closeButton.triggerClick(); }, {} });
 
     appContext.encoderNavigator->setModalFocusChain(std::move(items));
 }

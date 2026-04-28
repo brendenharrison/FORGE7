@@ -16,6 +16,7 @@ namespace forge7
 {
 
 struct AppContext;
+class CpuMeter;
 
 /** In-app fullscreen plugin UI for embedded pedal UX (not a separate OS window).
 
@@ -68,7 +69,9 @@ private:
     juce::Label titleLabel;
     juce::Label sceneVarLabel;
     juce::TextButton backButton { "Back" };
-    juce::ToggleButton assignModeToggle { "Assign mode" };
+    juce::TextButton closeButton { "Close" };
+    juce::ToggleButton assignModeToggle { "Assign" };
+    std::unique_ptr<CpuMeter> cpuMeter;
 
     juce::Viewport editorViewport;
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;

@@ -16,9 +16,9 @@ struct AppContext;
 class PluginBrowserComponent;
 class PluginInspectorComponent;
 
-/** Edit Mode rack: status bar, horizontal scrollable chain (IN → slots → OUT), plugin browser overlay.
+/** Edit Mode (“Rack”): status bar, dominant horizontal chain, optional collapsible inspector,
 
-    Touch-first layout for ~7" panels (large tap targets, dark theme). Message thread only. */
+    slot context strip, fullscreen in-app plugin browser. Touch-first ~7". Message thread only. */
 class RackViewComponent final : public juce::Component,
                                 private juce::Timer
 {
@@ -68,7 +68,7 @@ private:
     juce::Label editModeBadge;
     juce::Label tempoLabel;
     std::unique_ptr<CpuMeter> cpuMeter;
-    juce::TextButton menuButton { "Menu" };
+    juce::ToggleButton globalBypassFxToggle { "Bypass FX" };
 
     juce::Viewport chainViewport;
     std::unique_ptr<juce::Component> chainContent;
@@ -95,13 +95,19 @@ private:
     std::array<std::unique_ptr<juce::Label>, 9> arrowLabels {};
     std::array<std::unique_ptr<RackSlotCard>, kPluginChainMaxSlots> slotCards {};
 
-    juce::TextButton addPluginButton { "Add Plugin" };
+    juce::TextButton ctxMoveLeftButton { "\u2190" };
+    juce::TextButton ctxMoveRightButton { "\u2192" };
+    juce::ToggleButton ctxBypassToggle { "Bypass" };
+    juce::TextButton ctxRemoveButton { "Remove" };
+    juce::TextButton ctxReplaceButton { "Replace" };
+    juce::TextButton ctxEditorButton { "Editor" };
+    juce::TextButton ctxDetailButton { "Details" };
 
     juce::TextButton navPerformanceButton;
     juce::TextButton navScenesButton;
-    juce::TextButton navMixButton;
-    juce::ToggleButton bypassFxButton { "Bypass FX" };
     juce::TextButton settingsButton { "Settings" };
+
+    bool inspectorExpanded { false };
 
     std::unique_ptr<juce::Component> browserOverlay;
     std::unique_ptr<PluginBrowserComponent> pluginBrowser;

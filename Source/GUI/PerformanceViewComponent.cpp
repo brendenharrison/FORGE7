@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "../App/AppContext.h"
+#include "../App/MainComponent.h"
 
 #include "../Controls/EncoderFocusTypes.h"
 #include "../Controls/EncoderNavigator.h"
@@ -44,9 +45,9 @@ void styleHudLabel(juce::Label& lab, float fontHeight, juce::Colour c)
 }
 
 const ParameterMappingDescriptor* findMappingFor(const juce::Array<ParameterMappingDescriptor>& rows,
-                                                const juce::String& sceneId,
-                                                const juce::String& variationId,
-                                                HardwareControlId hid)
+                                                 const juce::String& sceneId,
+                                                 const juce::String& variationId,
+                                                 HardwareControlId hid)
 {
     for (const auto& row : rows)
     {
@@ -154,41 +155,29 @@ private:
 PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     : appContext(context),
       cpuMeter(appContext.audioEngine),
-      inputLevelMeter(appContext.audioEngine, MeterChannel::inputAfterGain),
-      outputLevelMeter(appContext.audioEngine, MeterChannel::outputAfterGain),
       audioHealthMonitor(appContext.audioEngine)
 {
-    addAndMakeVisible(tunerButton);
-    addAndMakeVisible(tempoButton);
-    addAndMakeVisible(setlistButton);
-    addAndMakeVisible(settingsButton);
-    styleToolbarButton(tunerButton);
-    styleToolbarButton(tempoButton);
-    styleToolbarButton(setlistButton);
+    styleToolbarButton(rackEditButton);
+    styleToolbarButton(chainPrevButton);
+    styleToolbarButton(chainNextButton);
     styleToolbarButton(settingsButton);
 
-    tunerButton.onClick = []()
+    rackEditButton.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Tuner",
-                                                 "Tuner — coming soon.",
-                                                 "OK");
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->setEditMode(true);
     };
 
-    tempoButton.onClick = []()
+    chainPrevButton.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Tempo",
-                                                 "Tap tempo / BPM edit — coming soon.",
-                                                 "OK");
+        if (appContext.sceneManager != nullptr && appContext.pluginHostManager != nullptr)
+            appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
     };
 
-    setlistButton.onClick = []()
+    chainNextButton.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Setlist",
-                                                 "Setlist navigation — coming soon.",
-                                                 "OK");
+        if (appContext.sceneManager != nullptr && appContext.pluginHostManager != nullptr)
+            appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
     };
 
     settingsButton.onClick = []()
@@ -199,31 +188,30 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
                                                  "OK");
     };
 
+    addAndMakeVisible(rackEditButton);
+    addAndMakeVisible(chainPrevButton);
+    addAndMakeVisible(chainNextButton);
+    addAndMakeVisible(settingsButton);
+
     styleHudLabel(bpmStatusLabel, 16.0f, perfText());
     addAndMakeVisible(bpmStatusLabel);
 
     addAndMakeVisible(cpuMeter);
-    addAndMakeVisible(inputLevelMeter);
-    addAndMakeVisible(outputLevelMeter);
-
-    songTitleLabel.setJustificationType(juce::Justification::centredLeft);
-    songTitleLabel.setFont(juce::Font(18.0f));
-    songTitleLabel.setColour(juce::Label::textColourId, perfMuted());
-    songTitleLabel.setText("Song", juce::dontSendNotification);
-    addAndMakeVisible(songTitleLabel);
 
     heroSceneLabel.setJustificationType(juce::Justification::centredLeft);
-    heroSceneLabel.setFont(juce::Font(38.0f));
+    heroSceneLabel.setFont(juce::Font(34.0f));
     heroSceneLabel.setColour(juce::Label::textColourId, perfText());
     addAndMakeVisible(heroSceneLabel);
 
-    styleHudLabel(sceneDetailLabel, 15.0f, perfMuted());
-    addAndMakeVisible(sceneDetailLabel);
-
     variationLabel.setJustificationType(juce::Justification::centredLeft);
-    variationLabel.setFont(juce::Font(20.0f));
+    variationLabel.setFont(juce::Font(22.0f));
     variationLabel.setColour(juce::Label::textColourId, perfAccent());
     addAndMakeVisible(variationLabel);
+
+    chainVarIndexLabel.setJustificationType(juce::Justification::centred);
+    chainVarIndexLabel.setFont(juce::Font(16.0f));
+    chainVarIndexLabel.setColour(juce::Label::textColourId, perfMuted());
+    addAndMakeVisible(chainVarIndexLabel);
 
     for (size_t i = 0; i < knobCards.size(); ++i)
     {
@@ -233,40 +221,22 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     }
 
     assign1TitleLabel.setText("Assign 1", juce::dontSendNotification);
-    styleHudLabel(assign1TitleLabel, 14.0f, perfMuted());
+    styleHudLabel(assign1TitleLabel, 13.0f, perfMuted());
     addAndMakeVisible(assign1TitleLabel);
 
     assign1FunctionLabel.setJustificationType(juce::Justification::centredLeft);
-    assign1FunctionLabel.setFont(juce::Font(18.0f));
+    assign1FunctionLabel.setFont(juce::Font(17.0f));
     assign1FunctionLabel.setColour(juce::Label::textColourId, perfText());
     addAndMakeVisible(assign1FunctionLabel);
 
     assign2TitleLabel.setText("Assign 2", juce::dontSendNotification);
-    styleHudLabel(assign2TitleLabel, 14.0f, perfMuted());
+    styleHudLabel(assign2TitleLabel, 13.0f, perfMuted());
     addAndMakeVisible(assign2TitleLabel);
 
     assign2FunctionLabel.setJustificationType(juce::Justification::centredLeft);
-    assign2FunctionLabel.setFont(juce::Font(18.0f));
+    assign2FunctionLabel.setFont(juce::Font(17.0f));
     assign2FunctionLabel.setColour(juce::Label::textColourId, perfText());
     addAndMakeVisible(assign2FunctionLabel);
-
-    chainStatusLabel.setJustificationType(juce::Justification::centredLeft);
-    chainStatusLabel.setFont(juce::Font(17.0f));
-    chainStatusLabel.setColour(juce::Label::textColourId, perfText());
-    addAndMakeVisible(chainStatusLabel);
-
-    scenesSectionLabel.setText("Scenes", juce::dontSendNotification);
-    styleHudLabel(scenesSectionLabel, 12.0f, perfMuted());
-    scenesSectionLabel.setMinimumHorizontalScale(1.0f);
-    addAndMakeVisible(scenesSectionLabel);
-
-    for (auto& lab : sceneListLabels)
-    {
-        lab.setJustificationType(juce::Justification::centredLeft);
-        lab.setFont(juce::Font(14.0f));
-        lab.setColour(juce::Label::textColourId, perfMuted());
-        addAndMakeVisible(lab);
-    }
 
     addAndMakeVisible(audioHealthMonitor);
 
@@ -279,13 +249,6 @@ PerformanceViewComponent::~PerformanceViewComponent() = default;
 void PerformanceViewComponent::paint(juce::Graphics& g)
 {
     g.fillAll(perfBg());
-
-    auto full = getLocalBounds();
-    auto belowTop = full.withTop(full.getY() + 52).withBottom(full.getBottom());
-    auto leftStrip = belowTop.removeFromLeft(132).reduced(6, 8);
-
-    g.setColour(perfPanel().withAlpha(0.92f));
-    g.fillRoundedRectangle(leftStrip.toFloat(), 8.0f);
 }
 
 void PerformanceViewComponent::timerCallback()
@@ -300,38 +263,9 @@ void PerformanceViewComponent::syncEncoderFocus()
 
     std::vector<EncoderFocusItem> items;
 
-    if (appContext.sceneManager != nullptr)
-    {
-        const auto& scenes = appContext.sceneManager->getScenes();
-        const int nScenes = static_cast<int>(scenes.size());
-        const int activeIdx = appContext.sceneManager->getActiveSceneIndex();
-        const int centre = juce::jlimit(0, juce::jmax(0, nScenes - 1), activeIdx);
-
-        for (int row = 0; row < kMaxSceneListRows; ++row)
-        {
-            const int si = centre - 2 + row;
-
-            if (!juce::isPositiveAndBelow(si, nScenes) || scenes[static_cast<size_t>(si)] == nullptr)
-                continue;
-
-            auto& lab = sceneListLabels[static_cast<size_t>(row)];
-
-            if (!lab.isVisible())
-                continue;
-
-            items.push_back({ &lab,
-                             [this, si]()
-                             {
-                                 if (appContext.sceneManager == nullptr)
-                                     return;
-
-                                 appContext.sceneManager->selectScene(si);
-
-                                 if (appContext.pluginHostManager != nullptr)
-                                     appContext.pluginHostManager->commitChainVariationCrossfade(*appContext.sceneManager);
-                             } });
-        }
-    }
+    items.push_back({ &rackEditButton, [this]() { rackEditButton.triggerClick(); }, {} });
+    items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
+    items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });
 
     for (size_t i = 0; i < knobCards.size(); ++i)
     {
@@ -339,9 +273,9 @@ void PerformanceViewComponent::syncEncoderFocus()
             items.push_back({ knobCards[i].get(), [] {}, {} });
     }
 
-    items.push_back({ &tunerButton, [this]() { tunerButton.triggerClick(); }, {} });
-    items.push_back({ &tempoButton, [this]() { tempoButton.triggerClick(); }, {} });
-    items.push_back({ &setlistButton, [this]() { setlistButton.triggerClick(); }, {} });
+    items.push_back({ &assign1FunctionLabel, [] {}, {} });
+    items.push_back({ &assign2FunctionLabel, [] {}, {} });
+
     items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
@@ -350,15 +284,16 @@ void PerformanceViewComponent::syncEncoderFocus()
 void PerformanceViewComponent::refreshHud()
 {
     juce::String sceneName { "Scene" };
-    juce::String sceneIdStr { "—" };
     juce::String variationName { "Variation" };
     juce::String bpmLine { "— BPM" };
-    juce::String chainLine { "Chain —" };
 
     juce::String activeSceneId;
     juce::String activeVarId;
 
     const ParameterMappingDescriptor* mapKnob[4] = {};
+
+    int variationIndexDisplay = -1;
+    int variationCountDisplay = 0;
 
     if (appContext.sceneManager != nullptr)
     {
@@ -368,7 +303,6 @@ void PerformanceViewComponent::refreshHud()
         if (juce::isPositiveAndBelow(activeIdx, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(activeIdx)] != nullptr)
         {
             const auto& sc = *scenes[static_cast<size_t>(activeIdx)];
-            sceneIdStr = sc.getSceneId().isNotEmpty() ? sc.getSceneId() : juce::String("—");
             sceneName = sc.getSceneName().isNotEmpty() ? sc.getSceneName() : juce::String("Untitled scene");
             activeSceneId = sc.getSceneId();
 
@@ -380,21 +314,23 @@ void PerformanceViewComponent::refreshHud()
                 vars.empty() ? 0
                              : juce::jlimit(0, static_cast<int>(vars.size()) - 1, rawVi);
 
+            variationCountDisplay = static_cast<int>(vars.size());
+
             if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
             {
                 const auto& v = *vars[static_cast<size_t>(vi)];
                 variationName = v.getVariationName().isNotEmpty() ? v.getVariationName() : juce::String("Variation");
                 activeVarId = v.getVariationId();
-
-                const int n = static_cast<int>(vars.size());
-                const bool hasPrev = vi > 0;
-                const bool hasNext = vi < n - 1;
-
-                chainLine = "Chain " + juce::String(vi + 1) + "/" + juce::String(n) + " | ";
-                chainLine += hasPrev ? juce::String("< prev | ") : juce::String("");
-                chainLine += variationName;
-                chainLine += hasNext ? juce::String(" | next >") : juce::String("");
+                variationIndexDisplay = vi;
             }
+
+            chainPrevButton.setEnabled(variationIndexDisplay > 0);
+            chainNextButton.setEnabled(variationCountDisplay > 0 && variationIndexDisplay < variationCountDisplay - 1);
+        }
+        else
+        {
+            chainPrevButton.setEnabled(false);
+            chainNextButton.setEnabled(false);
         }
 
         juce::Array<ParameterMappingDescriptor> mappingRows;
@@ -414,55 +350,24 @@ void PerformanceViewComponent::refreshHud()
             findMappingFor(mappingRows, activeSceneId, activeVarId, HardwareControlId::AssignButton2);
 
         assign1FunctionLabel.setText(mapA1 != nullptr && mapA1->displayName.isNotEmpty() ? mapA1->displayName
-                                                                                         : juce::String("Unassigned"),
+                                                                                         : juce::String("—"),
                                    juce::dontSendNotification);
 
         assign2FunctionLabel.setText(mapA2 != nullptr && mapA2->displayName.isNotEmpty() ? mapA2->displayName
-                                                                                         : juce::String("Unassigned"),
+                                                                                         : juce::String("—"),
                                    juce::dontSendNotification);
-
-        const int nScenes = static_cast<int>(scenes.size());
-        const int centre = juce::jlimit(0, nScenes - 1, activeIdx);
-
-        for (int row = 0; row < kMaxSceneListRows; ++row)
-        {
-            const int si = centre - 2 + row;
-
-            if (! juce::isPositiveAndBelow(si, nScenes) || scenes[static_cast<size_t>(si)] == nullptr)
-            {
-                sceneListLabels[static_cast<size_t>(row)].setVisible(false);
-                continue;
-            }
-
-            sceneListLabels[static_cast<size_t>(row)].setVisible(true);
-
-            const auto& s = *scenes[static_cast<size_t>(si)];
-            juce::String line = s.getSceneName();
-
-            if (line.isEmpty())
-                line = "Scene";
-
-            if (si == activeIdx)
-            {
-                sceneListLabels[static_cast<size_t>(row)].setFont(juce::Font(15.0f).boldened());
-                sceneListLabels[static_cast<size_t>(row)].setColour(juce::Label::textColourId, perfHighlight());
-                line = "> " + line;
-            }
-            else
-            {
-                sceneListLabels[static_cast<size_t>(row)].setFont(juce::Font(14.0f));
-                sceneListLabels[static_cast<size_t>(row)].setColour(juce::Label::textColourId, perfMuted());
-            }
-
-            sceneListLabels[static_cast<size_t>(row)].setText(line, juce::dontSendNotification);
-        }
     }
 
     heroSceneLabel.setText(sceneName, juce::dontSendNotification);
-    sceneDetailLabel.setText("Scene ID  " + sceneIdStr + "   ·   " + sceneName, juce::dontSendNotification);
     variationLabel.setText(variationName, juce::dontSendNotification);
     bpmStatusLabel.setText(bpmLine, juce::dontSendNotification);
-    chainStatusLabel.setText(chainLine, juce::dontSendNotification);
+
+    if (variationCountDisplay > 0 && variationIndexDisplay >= 0)
+        chainVarIndexLabel.setText(juce::String(variationIndexDisplay + 1) + " / "
+                                       + juce::String(variationCountDisplay),
+                                   juce::dontSendNotification);
+    else
+        chainVarIndexLabel.setText("—", juce::dontSendNotification);
 
     if (appContext.controlManager != nullptr)
     {
@@ -495,55 +400,45 @@ void PerformanceViewComponent::resized()
 {
     auto r = getLocalBounds();
 
-    const int topBarH = 52;
-    const int bottomStrip = 88;
-    const int sceneStripW = 132;
+    const int topBarH = 48;
+    const int bottomHud = 26;
 
     auto top = r.removeFromTop(topBarH).reduced(8, 6);
 
-    const int btnW = juce::jmin(108, top.getWidth() / 10);
-    tunerButton.setBounds(top.removeFromLeft(btnW));
-    top.removeFromLeft(6);
-    tempoButton.setBounds(top.removeFromLeft(btnW));
-    top.removeFromLeft(6);
-    setlistButton.setBounds(top.removeFromLeft(btnW));
-    top.removeFromLeft(6);
-    settingsButton.setBounds(top.removeFromLeft(btnW));
+    const int primaryBtn = juce::jmin(100, top.getWidth() / 6);
+    rackEditButton.setBounds(top.removeFromLeft(primaryBtn));
+    top.removeFromLeft(8);
+    settingsButton.setBounds(top.removeFromLeft(primaryBtn));
 
-    top.removeFromLeft(juce::jmax(8, top.getWidth() / 8));
+    top.removeFromLeft(juce::jmax(12, top.getWidth() / 10));
 
-    const int statW = juce::jmin(100, juce::jmax(72, top.getWidth() / 8));
+    const int statW = juce::jmin(104, juce::jmax(76, top.getWidth() / 6));
     bpmStatusLabel.setBounds(top.removeFromRight(statW));
     cpuMeter.setBounds(top.removeFromRight(statW).reduced(2, 0));
-    inputLevelMeter.setBounds(top.removeFromRight(statW).reduced(2, 0));
-    outputLevelMeter.setBounds(top.removeFromRight(statW).reduced(2, 0));
 
-    auto bottomArea = r.removeFromBottom(bottomStrip);
-    audioHealthMonitor.setBounds(bottomArea.reduced(10, 8));
+    auto bottomArea = r.removeFromBottom(bottomHud);
+    audioHealthMonitor.setBounds(bottomArea.reduced(12, 4));
 
-    auto main = r;
-    auto sceneStrip = main.removeFromLeft(sceneStripW).reduced(6, 8);
+    r.reduce(14, 10);
 
-    scenesSectionLabel.setBounds(sceneStrip.removeFromTop(20).reduced(10, 0));
+    heroSceneLabel.setBounds(r.removeFromTop(52));
+    r.removeFromTop(6);
+    variationLabel.setBounds(r.removeFromTop(34));
 
-    const int rowH = juce::jmax(22, (sceneStrip.getHeight() - 4) / kMaxSceneListRows);
+    auto chainRow = r.removeFromTop(44);
+    const int chainBtnW = juce::jmin(72, chainRow.getWidth() / 8);
+    chainPrevButton.setBounds(chainRow.removeFromLeft(chainBtnW).reduced(0, 4));
+    chainRow.removeFromLeft(8);
+    chainNextButton.setBounds(chainRow.removeFromRight(chainBtnW).reduced(0, 4));
+    chainRow.removeFromRight(8);
+    chainVarIndexLabel.setBounds(chainRow.reduced(4, 6));
 
-    for (int i = 0; i < kMaxSceneListRows; ++i)
-        sceneListLabels[static_cast<size_t>(i)].setBounds(sceneStrip.removeFromTop(rowH).reduced(10, 2));
+    r.removeFromTop(12);
 
-    main.reduce(10, 6);
-
-    songTitleLabel.setBounds(main.removeFromTop(22));
-    heroSceneLabel.setBounds(main.removeFromTop(52));
-    sceneDetailLabel.setBounds(main.removeFromTop(24));
-    variationLabel.setBounds(main.removeFromTop(36));
-
-    main.removeFromTop(10);
-
-    const int knobH = juce::jmax(168, juce::jmin(220, main.getHeight() / 2));
-    auto knobRow = main.removeFromTop(knobH);
+    const int knobH = juce::jmax(152, juce::jmin(210, r.getHeight() / 2));
+    auto knobRow = r.removeFromTop(knobH);
     const int gap = 8;
-    const int kw = juce::jmax(96, (knobRow.getWidth() - gap * 3) / 4);
+    const int kw = juce::jmax(88, (knobRow.getWidth() - gap * 3) / 4);
 
     for (int i = 0; i < 4; ++i)
     {
@@ -555,12 +450,12 @@ void PerformanceViewComponent::resized()
         }
     }
 
-    main.removeFromTop(10);
+    r.removeFromTop(12);
 
-    const int assignH = 52;
-    auto assignRow = main.removeFromTop(assignH);
+    const int assignH = 56;
+    auto assignRow = r.removeFromTop(assignH);
 
-    const int half = juce::jmax(140, assignRow.getWidth() / 2 - 8);
+    const int half = juce::jmax(130, assignRow.getWidth() / 2 - 8);
     auto a1 = assignRow.removeFromLeft(half).reduced(4, 2);
     assign1TitleLabel.setBounds(a1.removeFromTop(18));
     assign1FunctionLabel.setBounds(a1);
@@ -570,9 +465,6 @@ void PerformanceViewComponent::resized()
     auto a2 = assignRow.removeFromLeft(half).reduced(4, 2);
     assign2TitleLabel.setBounds(a2.removeFromTop(18));
     assign2FunctionLabel.setBounds(a2);
-
-    main.removeFromTop(6);
-    chainStatusLabel.setBounds(main.removeFromTop(28));
 
     syncEncoderFocus();
 }

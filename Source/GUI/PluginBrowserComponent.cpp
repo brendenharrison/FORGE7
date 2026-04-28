@@ -11,7 +11,7 @@ namespace
 constexpr int kSearchHeight = 48;
 constexpr int kCategoryStubHeight = 44;
 constexpr int kHeaderRowHeight = 30;
-constexpr int kRowHeight = 82;
+constexpr int kRowHeight = 88;
 constexpr int kButtonRowHeight = 54;
 constexpr int kErrorMinHeight = 52;
 constexpr float kPad = 12.0f;
@@ -55,7 +55,7 @@ void splitColumns(const int innerWidth, int& wName, int& wMfg, int& wFmt, int& w
 PluginBrowserComponent::PluginBrowserComponent(PluginHostManager& hostManager)
     : pluginHostManager(hostManager)
 {
-    titleLabel.setText("Add plugin", juce::dontSendNotification);
+    titleLabel.setText("Plugins", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(22.0f));
     titleLabel.setColour(juce::Label::textColourId, browserText());
@@ -222,9 +222,6 @@ void PluginBrowserComponent::paint(juce::Graphics& g)
 {
     g.fillAll(browserBg());
 
-    g.setColour(browserAccent().withAlpha(0.22f));
-    g.fillRoundedRectangle(getLocalBounds().toFloat().reduced(4.0f), 10.0f);
-
     auto catBounds = categoryPlaceholderLabel.getBounds().toFloat();
     g.setColour(browserBg().brighter(0.06f));
     g.fillRoundedRectangle(catBounds, 8.0f);
@@ -234,7 +231,7 @@ void PluginBrowserComponent::paint(juce::Graphics& g)
 
 void PluginBrowserComponent::resized()
 {
-    auto r = getLocalBounds().reduced(16);
+    auto r = getLocalBounds().reduced(10, 12);
 
     titleLabel.setBounds(r.removeFromTop(34));
     r.removeFromTop(10);

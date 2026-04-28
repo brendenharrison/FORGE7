@@ -21,26 +21,6 @@ namespace forge7
 namespace
 {
 
-/** Semi-transparent full-screen scrim; tapping outside the centered browser closes it. */
-class RackBrowserScrim final : public juce::Component
-{
-public:
-    std::function<void()> onTapOutsideContent;
-
-    void paint(juce::Graphics& g) override
-    {
-        g.fillAll(juce::Colours::black.withAlpha(0.72f));
-    }
-
-    void mouseDown(const juce::MouseEvent& e) override
-    {
-        juce::ignoreUnused(e);
-
-        if (onTapOutsideContent != nullptr)
-            onTapOutsideContent();
-    }
-};
-
 juce::Colour rackBackground() noexcept { return juce::Colour(0xff12151a); }
 juce::Colour rackSurface() noexcept { return juce::Colour(0xff1a1d23); }
 juce::Colour rackAccent() noexcept { return juce::Colour(0xff4a9eff); }
@@ -58,6 +38,13 @@ void styleBottomNavButton(juce::TextButton& b)
     b.setColour(juce::TextButton::buttonColourId, juce::Colours::transparentBlack);
     b.setColour(juce::TextButton::textColourOffId, rackText());
 }
+
+/** Full-screen underlay for Plugin Browser (in-app surface, not a floating OS window). */
+class RackBrowserBackdrop final : public juce::Component
+{
+public:
+    void paint(juce::Graphics& g) override { g.fillAll(rackBackground()); }
+};
 } // namespace
 
 RackViewComponent::IoBlock::IoBlock(const Kind k)
@@ -120,16 +107,20 @@ RackViewComponent::RackViewComponent(AppContext& context)
     if (cpuMeter != nullptr)
         addAndMakeVisible(*cpuMeter);
 
-    menuButton.onClick = []()
+    globalBypassFxToggle.setClickingTogglesState(true);
+
+    if (appContext.audioEngine != nullptr)
+        globalBypassFxToggle.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
+
+    globalBypassFxToggle.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Menu",
-                                                 "Project / audio / MIDI menus will live here.",
-                                                 "OK");
+        if (appContext.audioEngine != nullptr)
+            appContext.audioEngine->setGlobalBypass(globalBypassFxToggle.getToggleState());
     };
 
-    styleLargeTextButton(menuButton);
-    addAndMakeVisible(menuButton);
+    globalBypassFxToggle.setColour(juce::ToggleButton::textColourId, rackText());
+    globalBypassFxToggle.setColour(juce::ToggleButton::tickColourId, rackAccent());
+    addAndMakeVisible(globalBypassFxToggle);
 
     chainContent = std::make_unique<juce::Component>();
     chainContent->setInterceptsMouseClicks(true, true);
@@ -154,6 +145,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
     {
         slotCards[static_cast<size_t>(i)] = std::make_unique<RackSlotCard>();
         slotCards[static_cast<size_t>(i)]->setSlotIndex(i);
+        slotCards[static_cast<size_t>(i)]->setShowInlineControls(false);
         wireSlotCallbacks(i);
         chainContent->addAndMakeVisible(*slotCards[static_cast<size_t>(i)]);
     }
@@ -163,21 +155,10 @@ RackViewComponent::RackViewComponent(AppContext& context)
     chainViewport.getHorizontalScrollBar().setColour(juce::ScrollBar::thumbColourId, rackAccent().withAlpha(0.55f));
     addAndMakeVisible(chainViewport);
 
-    addPluginButton.onClick = [this]()
-    {
-        showPluginBrowser();
-    };
-
-    addPluginButton.setColour(juce::TextButton::buttonColourId, rackAccent().withAlpha(0.45f));
-    addPluginButton.setColour(juce::TextButton::textColourOffId, rackText());
-    addPluginButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
-    addAndMakeVisible(addPluginButton);
-
     navPerformanceButton.setButtonText("Performance");
     navScenesButton.setButtonText("Scenes");
-    navMixButton.setButtonText("Mix");
 
-    for (auto* b : { &navPerformanceButton, &navScenesButton, &navMixButton })
+    for (auto* b : { &navPerformanceButton, &navScenesButton })
     {
         styleBottomNavButton(*b);
         b->setMouseCursor(juce::MouseCursor::PointingHandCursor);
@@ -198,28 +179,101 @@ RackViewComponent::RackViewComponent(AppContext& context)
                                                  "OK");
     };
 
-    navMixButton.onClick = []()
+    auto wireCtxText = [this](juce::TextButton& b)
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Mix",
-                                                 "Mixer view coming soon.",
-                                                 "OK");
+        styleLargeTextButton(b);
+        b.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        addAndMakeVisible(b);
     };
 
-    bypassFxButton.setClickingTogglesState(true);
-
-    if (appContext.audioEngine != nullptr)
-        bypassFxButton.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
-
-    bypassFxButton.onClick = [this]()
+    ctxBypassToggle.setClickingTogglesState(true);
+    ctxBypassToggle.setColour(juce::ToggleButton::textColourId, rackText());
+    ctxBypassToggle.setColour(juce::ToggleButton::tickColourId, rackAccent());
+    ctxBypassToggle.onClick = [this]()
     {
-        if (appContext.audioEngine != nullptr)
-            appContext.audioEngine->setGlobalBypass(bypassFxButton.getToggleState());
+        if (appContext.pluginHostManager == nullptr || selectedSlotIndex < 0)
+            return;
+
+        if (auto* c = appContext.pluginHostManager->getPluginChain())
+            c->bypassSlot(selectedSlotIndex, ctxBypassToggle.getToggleState());
+    };
+    addAndMakeVisible(ctxBypassToggle);
+
+    wireCtxText(ctxMoveLeftButton);
+    wireCtxText(ctxMoveRightButton);
+    wireCtxText(ctxRemoveButton);
+    wireCtxText(ctxReplaceButton);
+    wireCtxText(ctxEditorButton);
+    wireCtxText(ctxDetailButton);
+
+    ctxRemoveButton.onClick = [this]()
+    {
+        if (appContext.pluginHostManager == nullptr || selectedSlotIndex < 0)
+            return;
+
+        if (auto* c = appContext.pluginHostManager->getPluginChain())
+            c->removePluginFromSlot(selectedSlotIndex);
+
+        refreshSlotDisplays();
     };
 
-    bypassFxButton.setColour(juce::ToggleButton::textColourId, rackText());
-    bypassFxButton.setColour(juce::ToggleButton::tickColourId, rackAccent());
-    addAndMakeVisible(bypassFxButton);
+    ctxReplaceButton.onClick = [this]() { showPluginBrowser(); };
+
+    ctxEditorButton.onClick = [this]()
+    {
+        if (selectedSlotIndex < 0)
+            return;
+
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->openFullscreenPluginEditor(selectedSlotIndex);
+    };
+
+    ctxDetailButton.onClick = [this]()
+    {
+        inspectorExpanded = !inspectorExpanded;
+
+        if (pluginInspector != nullptr)
+        {
+            pluginInspector->setVisible(inspectorExpanded);
+            ctxDetailButton.setButtonText(inspectorExpanded ? "Hide" : "Details");
+        }
+
+        resized();
+        syncEncoderFocus();
+    };
+
+    ctxMoveLeftButton.onClick = [this]()
+    {
+        if (appContext.pluginHostManager == nullptr || selectedSlotIndex <= 0)
+            return;
+
+        if (auto* c = appContext.pluginHostManager->getPluginChain())
+        {
+            const int from = selectedSlotIndex;
+
+            if (c->moveSlot(from, from - 1))
+                setSelectedSlot(from - 1);
+        }
+
+        refreshSlotDisplays();
+    };
+
+    ctxMoveRightButton.onClick = [this]()
+    {
+        if (appContext.pluginHostManager == nullptr || selectedSlotIndex < 0
+            || selectedSlotIndex >= kPluginChainMaxSlots - 1)
+            return;
+
+        if (auto* c = appContext.pluginHostManager->getPluginChain())
+        {
+            const int from = selectedSlotIndex;
+
+            if (c->moveSlot(from, from + 1))
+                setSelectedSlot(from + 1);
+        }
+
+        refreshSlotDisplays();
+    };
 
     settingsButton.onClick = []()
     {
@@ -232,13 +286,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
     styleLargeTextButton(settingsButton);
     addAndMakeVisible(settingsButton);
 
-    auto scrim = std::make_unique<RackBrowserScrim>();
-    scrim->onTapOutsideContent = [this]()
-    {
-        hidePluginBrowser();
-    };
-
-    browserOverlay = std::move(scrim);
+    browserOverlay = std::make_unique<RackBrowserBackdrop>();
     browserOverlay->setAlwaysOnTop(true);
     browserOverlay->setVisible(false);
     browserOverlay->setInterceptsMouseClicks(true, true);
@@ -272,7 +320,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
     {
         refreshSlotDisplays();
     };
-    addAndMakeVisible(*pluginInspector);
+    pluginInspector->setVisible(false);
+
+    addChildComponent(*pluginInspector);
 
     startTimerHz(4);
 }
@@ -291,59 +341,77 @@ void RackViewComponent::resized()
 {
     auto area = getLocalBounds();
 
-    const int statusH = 56;
-    const int bottomH = 56;
-    const int addH = 52;
+    const int statusH = 52;
+    const int contextH = 50;
+    const int bottomH = 52;
     const int pad = 8;
 
+    // Top: scene / variation / edit badge / tempo / global bypass / CPU
     auto statusArea = area.removeFromTop(statusH).reduced(pad, 4);
-
-    menuButton.setBounds(statusArea.removeFromRight(88));
-    statusArea.removeFromRight(8);
 
     if (cpuMeter != nullptr)
     {
-        cpuMeter->setBounds(statusArea.removeFromRight(100).reduced(0, 4));
-        statusArea.removeFromRight(8);
+        cpuMeter->setBounds(statusArea.removeFromRight(96).reduced(0, 2));
+        statusArea.removeFromRight(6);
     }
 
-    tempoLabel.setBounds(statusArea.removeFromRight(120));
-    statusArea.removeFromRight(12);
+    globalBypassFxToggle.setBounds(statusArea.removeFromRight(100).reduced(0, 2));
+    statusArea.removeFromRight(6);
 
-    editModeBadge.setBounds(statusArea.removeFromRight(120).reduced(0, 6));
-    statusArea.removeFromRight(12);
-
-    variationLabel.setBounds(statusArea.removeFromRight(juce::jmin(200, statusArea.getWidth() / 3)));
+    tempoLabel.setBounds(statusArea.removeFromRight(100).reduced(0, 2));
     statusArea.removeFromRight(8);
 
+    editModeBadge.setBounds(statusArea.removeFromRight(110).reduced(0, 4));
+    statusArea.removeFromRight(8);
+
+    const int varW = juce::jmin(200, juce::jmax(100, statusArea.getWidth() / 4));
+    variationLabel.setBounds(statusArea.removeFromRight(varW));
+    statusArea.removeFromRight(6);
     sceneTitleLabel.setBounds(statusArea);
 
-    area.removeFromTop(pad);
+    area.removeFromTop(4);
 
+    // Bottom: primary nav (Performance / Scenes) + settings
     auto bottomArea = area.removeFromBottom(bottomH).reduced(pad, 4);
 
-    settingsButton.setBounds(bottomArea.removeFromRight(96));
-    bottomArea.removeFromRight(6);
-    bypassFxButton.setBounds(bottomArea.removeFromRight(120));
-    bottomArea.removeFromRight(10);
+    settingsButton.setBounds(bottomArea.removeFromRight(100).reduced(0, 2));
+    bottomArea.removeFromRight(8);
 
-    const int navThird = juce::jmax(100, bottomArea.getWidth() / 3);
-    navPerformanceButton.setBounds(bottomArea.removeFromLeft(navThird).reduced(2, 0));
-    navScenesButton.setBounds(bottomArea.removeFromLeft(navThird).reduced(2, 0));
-    navMixButton.setBounds(bottomArea.reduced(2, 0));
+    const int navHalf = juce::jmax(120, bottomArea.getWidth() / 2);
+    navPerformanceButton.setBounds(bottomArea.removeFromLeft(navHalf).reduced(4, 0));
+    navScenesButton.setBounds(bottomArea.reduced(4, 0));
 
-    area.removeFromBottom(pad);
+    area.removeFromBottom(4);
 
-    addPluginButton.setBounds(area.removeFromBottom(addH).withSizeKeepingCentre(juce::jmin(420, getWidth() - 32), addH - 8));
+    // Slot actions (hardware-style strip)
+    auto ctxRow = area.removeFromBottom(contextH).reduced(pad, 2);
+    const int ctxGap = 6;
 
-    area.removeFromBottom(6);
+    ctxDetailButton.setBounds(ctxRow.removeFromRight(92).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxEditorButton.setBounds(ctxRow.removeFromRight(92).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxReplaceButton.setBounds(ctxRow.removeFromRight(100).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxRemoveButton.setBounds(ctxRow.removeFromRight(88).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxBypassToggle.setBounds(ctxRow.removeFromRight(100).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxMoveRightButton.setBounds(ctxRow.removeFromRight(56).reduced(0, 2));
+    ctxRow.removeFromRight(ctxGap);
+    ctxMoveLeftButton.setBounds(ctxRow.removeFromRight(56).reduced(0, 2));
 
-    const int inspectorH = juce::jlimit(168, 280, juce::roundToInt((float)area.getHeight() * 0.42f));
+    area.removeFromBottom(4);
 
-    if (pluginInspector != nullptr)
+    const int inspectorH = inspectorExpanded ? juce::jlimit(140, 220, juce::roundToInt(0.28f * (float)getHeight()))
+                                             : 0;
+
+    if (inspectorExpanded && pluginInspector != nullptr)
         pluginInspector->setBounds(area.removeFromBottom(inspectorH).reduced(pad, 0));
+    else if (pluginInspector != nullptr)
+        pluginInspector->setBounds({});
 
-    area.removeFromBottom(6);
+    area.removeFromBottom(inspectorExpanded ? 4 : 0);
 
     chainViewport.setBounds(area);
 
@@ -397,7 +465,7 @@ void RackViewComponent::timerCallback()
     refreshSlotDisplays();
 
     if (appContext.audioEngine != nullptr)
-        bypassFxButton.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
+        globalBypassFxToggle.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
 }
 
 void RackViewComponent::refreshSlotDisplays()
@@ -451,6 +519,40 @@ void RackViewComponent::refreshSlotDisplays()
 
     if (pluginInspector != nullptr)
         pluginInspector->refreshFromHost();
+
+    // Context strip (selection-dependent labels / toggles)
+    auto* chainForUi = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+    if (appContext.audioEngine != nullptr)
+        globalBypassFxToggle.setToggleState(appContext.audioEngine->isGlobalBypass(), juce::dontSendNotification);
+
+    const bool haveSlot =
+        selectedSlotIndex >= 0 && selectedSlotIndex < kPluginChainMaxSlots && chainForUi != nullptr;
+    SlotInfo ctxInfo {};
+
+    if (haveSlot)
+        ctxInfo = chainForUi->getSlotInfo(selectedSlotIndex);
+
+    const bool hasBlock = haveSlot && (!ctxInfo.isEmpty || ctxInfo.isPlaceholder || ctxInfo.missingPlugin);
+
+    ctxMoveLeftButton.setEnabled(haveSlot && selectedSlotIndex > 0);
+    ctxMoveRightButton.setEnabled(haveSlot && selectedSlotIndex < kPluginChainMaxSlots - 1);
+    ctxBypassToggle.setEnabled(hasBlock);
+
+    if (hasBlock)
+        ctxBypassToggle.setToggleState(ctxInfo.bypass, juce::dontSendNotification);
+    else
+        ctxBypassToggle.setToggleState(false, juce::dontSendNotification);
+
+    ctxRemoveButton.setEnabled(hasBlock);
+    ctxReplaceButton.setEnabled(haveSlot);
+    ctxEditorButton.setEnabled(hasBlock);
+    ctxDetailButton.setEnabled(hasBlock);
+
+    if (haveSlot)
+        ctxReplaceButton.setButtonText((ctxInfo.isEmpty && !ctxInfo.missingPlugin) ? "Add" : "Replace");
+    else
+        ctxReplaceButton.setButtonText("Add");
 }
 
 void RackViewComponent::wireSlotCallbacks(const int slotIndex)
@@ -552,11 +654,7 @@ void RackViewComponent::showPluginBrowser()
     addAndMakeVisible(*browserOverlay);
     browserOverlay->toFront(true);
 
-    auto bounds = browserOverlay->getLocalBounds().reduced(12);
-    const int maxW = juce::jmin(720, bounds.getWidth());
-    const int maxH = juce::jmin(520, bounds.getHeight());
-
-    pluginBrowser->setBounds(bounds.withSizeKeepingCentre(maxW, maxH));
+    pluginBrowser->setBounds(browserOverlay->getLocalBounds().reduced(6));
     pluginBrowser->toFront(false);
 
     syncEncoderFocus();
@@ -613,10 +711,17 @@ void RackViewComponent::syncEncoderFocus()
                          {} });
     }
 
-    items.push_back({ &addPluginButton, [this]() { addPluginButton.triggerClick(); }, {} });
-    items.push_back({ &bypassFxButton, [this]() { bypassFxButton.triggerClick(); }, {} });
+    items.push_back({ &ctxMoveLeftButton, [this]() { ctxMoveLeftButton.triggerClick(); }, {} });
+    items.push_back({ &ctxMoveRightButton, [this]() { ctxMoveRightButton.triggerClick(); }, {} });
+    items.push_back({ &ctxBypassToggle, [this]() { ctxBypassToggle.triggerClick(); }, {} });
+    items.push_back({ &ctxRemoveButton, [this]() { ctxRemoveButton.triggerClick(); }, {} });
+    items.push_back({ &ctxReplaceButton, [this]() { ctxReplaceButton.triggerClick(); }, {} });
+    items.push_back({ &ctxEditorButton, [this]() { ctxEditorButton.triggerClick(); }, {} });
+    items.push_back({ &ctxDetailButton, [this]() { ctxDetailButton.triggerClick(); }, {} });
+    items.push_back({ &globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, {} });
+    items.push_back({ &navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, {} });
+    items.push_back({ &navScenesButton, [this]() { navScenesButton.triggerClick(); }, {} });
     items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
-    items.push_back({ &menuButton, [this]() { menuButton.triggerClick(); }, {} });
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
 }

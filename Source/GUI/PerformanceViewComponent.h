@@ -7,16 +7,15 @@
 
 #include "AudioHealthMonitor.h"
 #include "CpuMeter.h"
-#include "LevelMeter.h"
 
 namespace forge7
 {
 
 struct AppContext;
 
-/** Live performance screen: large scene context, four hardware knob cards, chain/scene status,
+/** Live performance screen: scene + chain variation, K1–K4, assigns, variation navigation,
 
-    assign buttons, scene strip, and top status (BPM, CPU, meters). Dark, high-contrast, touch-friendly. */
+    BPM/CPU — tuned for ~7\" embedded pedal use (minimal chrome). */
 class PerformanceViewComponent final : public juce::Component,
                                        private juce::Timer
 {
@@ -27,7 +26,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    /** Rebuild hardware encoder focus ring targets (scene strip, knob cards, toolbar). */
+    /** Rebuild hardware encoder focus ring targets. */
     void syncEncoderFocus();
 
 private:
@@ -36,20 +35,17 @@ private:
 
     AppContext& appContext;
 
-    juce::TextButton tunerButton { "Tuner" };
-    juce::TextButton tempoButton { "Tempo" };
-    juce::TextButton setlistButton { "Setlist" };
+    juce::TextButton rackEditButton { "RACK" };
+    juce::TextButton chainPrevButton { "\u2212" };
+    juce::TextButton chainNextButton { "+" };
     juce::TextButton settingsButton { "Settings" };
 
     juce::Label bpmStatusLabel;
     CpuMeter cpuMeter;
-    LevelMeter inputLevelMeter;
-    LevelMeter outputLevelMeter;
 
-    juce::Label songTitleLabel;
     juce::Label heroSceneLabel;
-    juce::Label sceneDetailLabel;
     juce::Label variationLabel;
+    juce::Label chainVarIndexLabel;
 
     class KnobCard;
     std::array<std::unique_ptr<KnobCard>, 4> knobCards;
@@ -58,12 +54,6 @@ private:
     juce::Label assign1FunctionLabel;
     juce::Label assign2TitleLabel;
     juce::Label assign2FunctionLabel;
-
-    juce::Label chainStatusLabel;
-
-    static constexpr int kMaxSceneListRows = 5;
-    juce::Label scenesSectionLabel;
-    std::array<juce::Label, kMaxSceneListRows> sceneListLabels;
 
     AudioHealthMonitor audioHealthMonitor;
 

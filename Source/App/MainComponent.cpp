@@ -216,7 +216,7 @@ juce::String MainComponent::describeUiSurfaceForDevTools() const
         return "Fullscreen Plugin Editor";
 
     if (rackView != nullptr && rackView->isPluginBrowserVisible())
-        return "Plugin Browser (modal)";
+        return "Plugin Browser (fullscreen)";
 
     if (editMode)
         return "Edit Mode / Rack View";

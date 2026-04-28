@@ -22,6 +22,9 @@ public:
     int getSlotIndex() const noexcept { return slotIndex; }
 
     void setSelected(bool selected) noexcept;
+    /** When false, bypass/remove are hidden; use rack context strip for actions (embedded UI). */
+    void setShowInlineControls(bool show) noexcept;
+
     void refreshFromSlotInfo(const SlotInfo& info);
 
     std::function<void(int slotIndex)> onSelect;
@@ -42,6 +45,7 @@ private:
     juce::TextButton removeButton { "Remove" };
 
     SlotInfo lastInfo {};
+    bool showInlineControls { true };
 
     void syncLabelsFromInfo();
 
