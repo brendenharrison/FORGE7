@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <vector>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -55,14 +56,37 @@ private:
     void wireSlotCallbacks(int slotIndex);
     void setSelectedSlot(int slotIndex);
 
-    void hidePluginBrowser();
+    /** Overlay hidden; rollback pending add state only when `cancelled` is true. */
+    void dismissPluginBrowserOverlay(bool cancelled);
 
-    /** Loads into the selected rack slot. Returns false if load failed (browser stays open + error shown). */
+    /** Loads into the resolved target slot for the active browser session. Returns false if load failed. */
     bool loadPluginIntoSelectedSlot(const juce::PluginDescription& desc);
+
+    int resolveTargetSlotForPluginLoad() const noexcept;
+    int findFirstEmptyBackendSlotIndex() const noexcept;
+
+    /** Move plugins left to eliminate leading-empty gaps while keeping contiguous order. Message thread only. */
+    void compactChainLeadingGapsFromPluginLoads();
+
+    std::vector<int> getVisiblePluginSlotIndices() const;
+
+    [[nodiscard]] static bool rackSlotShowsContent(const SlotInfo& info) noexcept;
+
+    [[nodiscard]] static bool chainSlotShowsInRailLine(int pendingAddSlotIdx, int slotIdx, const SlotInfo& info) noexcept;
+
+    enum class BrowserOpenReason
+    {
+        None,
+        AddNewSlot,
+        ReplaceExistingSlot
+    };
 
     AppContext& appContext;
 
     int selectedSlotIndex { -1 };
+    int pendingAddSlotIndex { -1 };
+    int selectionBeforePendingAdd { -1 };
+    BrowserOpenReason browserOpenReason { BrowserOpenReason::None };
 
     juce::Label sceneTitleLabel;
     juce::Label variationLabel;
@@ -71,7 +95,7 @@ private:
     std::unique_ptr<CpuMeter> cpuMeter;
     juce::ToggleButton globalBypassFxToggle { "Bypass FX" };
 
-    juce::Viewport chainViewport;
+    juce::Viewport chainViewport; // Center lane only (plugins + add card). IO blocks are fixed outside.
     std::unique_ptr<juce::Component> chainContent;
 
     class IoBlock final : public juce::Component
@@ -95,6 +119,16 @@ private:
     std::unique_ptr<IoBlock> outputBlock;
     std::array<std::unique_ptr<juce::Label>, 9> arrowLabels {};
     std::array<std::unique_ptr<RackSlotCard>, kPluginChainMaxSlots> slotCards {};
+
+    class AddPluginCard final : public juce::Component
+    {
+    public:
+        std::function<void()> onAddClicked;
+        void paint(juce::Graphics& g) override;
+        void mouseDown(const juce::MouseEvent& e) override;
+    };
+
+    std::unique_ptr<AddPluginCard> addPluginCard;
 
     juce::TextButton ctxMoveLeftButton { "<" };
     juce::TextButton ctxMoveRightButton { ">" };

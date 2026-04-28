@@ -49,6 +49,31 @@ public:
 };
 } // namespace
 
+void RackViewComponent::AddPluginCard::paint(juce::Graphics& g)
+{
+    auto bounds = getLocalBounds().toFloat().reduced(2.0f);
+    g.setColour(rackSurface().brighter(0.05f));
+    g.fillRoundedRectangle(bounds, 12.0f);
+
+    g.setColour(rackAccent().withAlpha(0.45f));
+    g.drawRoundedRectangle(bounds, 12.0f, 2.0f);
+
+    g.setColour(rackAccent());
+    g.setFont(juce::Font(34.0f, juce::Font::bold));
+    g.drawText("+", getLocalBounds().removeFromTop(getHeight() / 2), juce::Justification::centred, false);
+
+    g.setColour(rackText());
+    g.setFont(juce::Font(14.0f, juce::Font::bold));
+    g.drawText("Add Plugin", getLocalBounds().removeFromBottom(28), juce::Justification::centred, false);
+}
+
+void RackViewComponent::AddPluginCard::mouseDown(const juce::MouseEvent& e)
+{
+    juce::ignoreUnused(e);
+    if (onAddClicked != nullptr)
+        onAddClicked();
+}
+
 RackViewComponent::IoBlock::IoBlock(const Kind k)
     : kind(k)
 {
@@ -124,13 +149,35 @@ RackViewComponent::RackViewComponent(AppContext& context)
     globalBypassFxToggle.setColour(juce::ToggleButton::tickColourId, rackAccent());
     addAndMakeVisible(globalBypassFxToggle);
 
-    chainContent = std::make_unique<juce::Component>();
-    chainContent->setInterceptsMouseClicks(true, true);
-
     inputBlock = std::make_unique<IoBlock>(IoBlock::Kind::Input);
     outputBlock = std::make_unique<IoBlock>(IoBlock::Kind::Output);
-    chainContent->addAndMakeVisible(*inputBlock);
-    chainContent->addAndMakeVisible(*outputBlock);
+    addAndMakeVisible(*inputBlock);
+    addAndMakeVisible(*outputBlock);
+
+    addPluginCard = std::make_unique<AddPluginCard>();
+    addPluginCard->onAddClicked = [this]()
+    {
+        if (appContext.pluginHostManager == nullptr)
+            return;
+
+        auto* chain = appContext.pluginHostManager->getPluginChain();
+        if (chain == nullptr)
+            return;
+
+        const int nextEmpty = findFirstEmptyBackendSlotIndex();
+        if (nextEmpty < 0)
+            return;
+
+        selectionBeforePendingAdd = selectedSlotIndex;
+        pendingAddSlotIndex = nextEmpty;
+        browserOpenReason = BrowserOpenReason::AddNewSlot;
+
+        Logger::info("FORGE7 RackAdd: add card clicked targetSlot=" + juce::String(nextEmpty)
+                     + " selectedBefore=" + juce::String(selectionBeforePendingAdd));
+
+        setSelectedSlot(pendingAddSlotIndex);
+        showPluginBrowser();
+    };
 
     for (auto& a : arrowLabels)
     {
@@ -140,7 +187,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
         a->setColour(juce::Label::textColourId, rackMuted());
         a->setFont(juce::Font(28.0f));
         a->setInterceptsMouseClicks(false, false);
-        chainContent->addAndMakeVisible(*a);
+        // Arrows belong to the center lane content.
     }
 
     for (int i = 0; i < kPluginChainMaxSlots; ++i)
@@ -149,11 +196,22 @@ RackViewComponent::RackViewComponent(AppContext& context)
         slotCards[static_cast<size_t>(i)]->setSlotIndex(i);
         slotCards[static_cast<size_t>(i)]->setShowInlineControls(false);
         wireSlotCallbacks(i);
-        chainContent->addAndMakeVisible(*slotCards[static_cast<size_t>(i)]);
+        addChildComponent(*slotCards[static_cast<size_t>(i)]);
     }
 
+    chainContent = std::make_unique<juce::Component>();
+    chainContent->setInterceptsMouseClicks(true, true);
+
+    for (auto& a : arrowLabels)
+        chainContent->addAndMakeVisible(*a);
+    for (auto& c : slotCards)
+        if (c != nullptr)
+            chainContent->addChildComponent(*c);
+    if (addPluginCard != nullptr)
+        chainContent->addAndMakeVisible(*addPluginCard);
+
     chainViewport.setViewedComponent(chainContent.get(), false);
-    chainViewport.setScrollBarsShown(true, false);
+    chainViewport.setScrollBarsShown(false, true); // no vertical scroll; center lane may scroll horizontally later
     chainViewport.getHorizontalScrollBar().setColour(juce::ScrollBar::thumbColourId, rackAccent().withAlpha(0.55f));
     addAndMakeVisible(chainViewport);
 
@@ -219,7 +277,18 @@ RackViewComponent::RackViewComponent(AppContext& context)
         refreshSlotDisplays();
     };
 
-    ctxReplaceButton.onClick = [this]() { showPluginBrowser(); };
+    ctxReplaceButton.onClick = [this]()
+    {
+        if (selectedSlotIndex < 0)
+            return;
+
+        pendingAddSlotIndex = -1;
+        browserOpenReason = BrowserOpenReason::ReplaceExistingSlot;
+
+        Logger::info("FORGE7 RackAdd: Replace clicked replaceSlot=" + juce::String(selectedSlotIndex));
+
+        showPluginBrowser();
+    };
 
     ctxEditorButton.onClick = [this]()
     {
@@ -308,12 +377,12 @@ RackViewComponent::RackViewComponent(AppContext& context)
     pluginBrowser->onPluginChosen = [this](const juce::PluginDescription& d)
     {
         if (loadPluginIntoSelectedSlot(d))
-            hidePluginBrowser();
+            dismissPluginBrowserOverlay(false);
     };
 
     pluginBrowser->onDismiss = [this]()
     {
-        hidePluginBrowser();
+        dismissPluginBrowserOverlay(true);
     };
 
     browserOverlay->addAndMakeVisible(*pluginBrowser);
@@ -429,7 +498,22 @@ void RackViewComponent::resized()
 
     area.removeFromBottom(inspectorExpanded ? 4 : 0);
 
-    chainViewport.setBounds(area);
+    // Chain region: fixed INPUT (left), fixed OUTPUT (right), center lane for visible plugins + Add card.
+    const int ioW = 100;
+    const int padChain = pad;
+    auto chainArea = area.reduced(padChain, 0);
+
+    auto leftIo = chainArea.removeFromLeft(ioW);
+    chainArea.removeFromLeft(10);
+    auto rightIo = chainArea.removeFromRight(ioW);
+    chainArea.removeFromRight(10);
+
+    if (inputBlock != nullptr)
+        inputBlock->setBounds(leftIo.reduced(0, 8));
+    if (outputBlock != nullptr)
+        outputBlock->setBounds(rightIo.reduced(0, 8));
+
+    chainViewport.setBounds(chainArea);
 
     layoutRackChain();
 
@@ -441,39 +525,126 @@ void RackViewComponent::layoutRackChain()
     if (chainContent == nullptr)
         return;
 
-    const int ioW = 80;
-    const int arrowW = 28;
-    const int gap = 8;
-    const int pad = 10;
-    const int stripH = juce::jmax(140, chainViewport.getHeight() > 0 ? chainViewport.getHeight() - 12 : 140);
+    const int arrowW = 30;
+    const int gap = 10;
+    const int pad = 8;
+    const int stripH = juce::jmax(150, chainViewport.getHeight() > 0 ? chainViewport.getHeight() - 8 : 150);
+    const int pluginW = 170;
+    const int addW = 160;
 
-    const int availForSlots = juce::jmax(88 * kPluginChainMaxSlots,
-                                         chainViewport.getWidth() - (pad * 2) - ioW * 2 - arrowW * 9 - gap * 18);
+    auto* chain = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+    if (chain == nullptr)
+        return;
 
-    const int slotW = juce::jmax(88, availForSlots / kPluginChainMaxSlots);
+    // Determine visible used slots (contiguous from slot 0).
+    int lastUsed = -1;
+    for (int i = 0; i < kPluginChainMaxSlots; ++i)
+    {
+        const auto info = chain->getSlotInfo(i);
+
+        if (chainSlotShowsInRailLine(pendingAddSlotIndex, i, info))
+            lastUsed = i;
+        else
+            break;
+    }
+
+    // Show only used cards (0..lastUsed), plus pending add if it is beyond lastUsed.
+    for (int i = 0; i < kPluginChainMaxSlots; ++i)
+    {
+        const bool shouldShow = (i >= 0 && i <= lastUsed) || (i == pendingAddSlotIndex && i > lastUsed);
+        if (slotCards[(size_t)i] != nullptr)
+            slotCards[(size_t)i]->setVisible(shouldShow);
+    }
+
+    const bool chainFull = (lastUsed >= kPluginChainMaxSlots - 1) || (pendingAddSlotIndex == kPluginChainMaxSlots - 1 && lastUsed >= 0);
+
+    const bool showAdd = !chainFull;
+    if (addPluginCard != nullptr)
+        addPluginCard->setVisible(showAdd);
+
+    // Hide all arrows; we'll show only what we use.
+    for (auto& a : arrowLabels)
+        if (a != nullptr)
+            a->setVisible(false);
 
     int x = pad;
     const int y = pad;
 
-    inputBlock->setBounds(x, y, ioW, stripH);
-    x += ioW + gap;
+    // arrow after input (index 0)
+    int arrowIdx = 0;
 
-    for (int i = 0; i < 8; ++i)
+    auto placeArrow = [&](int cx)
     {
-        arrowLabels[static_cast<size_t>(i)]->setBounds(x, y + stripH / 2 - 18, arrowW, 36);
-        x += arrowW + gap;
+        if (arrowIdx < (int)arrowLabels.size() && arrowLabels[(size_t)arrowIdx] != nullptr)
+        {
+            arrowLabels[(size_t)arrowIdx]->setVisible(true);
+            arrowLabels[(size_t)arrowIdx]->setBounds(cx, y + stripH / 2 - 18, arrowW, 36);
+        }
+        ++arrowIdx;
+    };
 
-        slotCards[static_cast<size_t>(i)]->setBounds(x, y, slotW, stripH);
-        x += slotW + gap;
-    }
-
-    arrowLabels[8]->setBounds(x, y + stripH / 2 - 18, arrowW, 36);
+    // First arrow (INPUT -> ...)
+    placeArrow(x);
     x += arrowW + gap;
 
-    outputBlock->setBounds(x, y, ioW, stripH);
+    // Visible plugin cards.
+    for (int i = 0; i <= lastUsed; ++i)
+    {
+        auto* c = slotCards[(size_t)i].get();
+        if (c == nullptr)
+            continue;
 
-    const int totalW = x + ioW + pad;
-    chainContent->setSize(totalW, stripH + pad * 2);
+        c->setBounds(x, y, pluginW, stripH);
+        x += pluginW + gap;
+
+        placeArrow(x);
+        x += arrowW + gap;
+    }
+
+    // Pending add slot beyond lastUsed (rare)
+    if (pendingAddSlotIndex > lastUsed && pendingAddSlotIndex >= 0 && pendingAddSlotIndex < kPluginChainMaxSlots)
+    {
+        auto* c = slotCards[(size_t)pendingAddSlotIndex].get();
+        if (c != nullptr)
+        {
+            c->setBounds(x, y, pluginW, stripH);
+            x += pluginW + gap;
+
+            placeArrow(x);
+            x += arrowW + gap;
+        }
+    }
+
+    // Add card
+    if (showAdd && addPluginCard != nullptr)
+    {
+        addPluginCard->setBounds(x, y, addW, stripH);
+        x += addW + gap;
+
+        placeArrow(x);
+        x += arrowW + gap;
+    }
+
+    // Size content; center it in the viewport if it fits.
+    const int contentW = x + pad;
+    chainContent->setSize(juce::jmax(contentW, chainViewport.getWidth()), stripH + pad * 2);
+
+    const int extra = chainViewport.getWidth() - contentW;
+    if (extra > 0)
+    {
+        // Shift everything right to center.
+        const int dx = extra / 2;
+        for (auto& a : arrowLabels)
+            if (a != nullptr && a->isVisible())
+                a->setTopLeftPosition(a->getX() + dx, a->getY());
+
+        for (int i = 0; i < kPluginChainMaxSlots; ++i)
+            if (slotCards[(size_t)i] != nullptr && slotCards[(size_t)i]->isVisible())
+                slotCards[(size_t)i]->setTopLeftPosition(slotCards[(size_t)i]->getX() + dx, slotCards[(size_t)i]->getY());
+
+        if (addPluginCard != nullptr && addPluginCard->isVisible())
+            addPluginCard->setTopLeftPosition(addPluginCard->getX() + dx, addPluginCard->getY());
+    }
 }
 
 void RackViewComponent::timerCallback()
@@ -502,6 +673,8 @@ void RackViewComponent::refreshSlotDisplays()
 
     if (chain == nullptr)
         return;
+
+    compactChainLeadingGapsFromPluginLoads();
 
     juce::String sceneLine = "Scene";
     juce::String varLine = "Variation";
@@ -541,7 +714,14 @@ void RackViewComponent::refreshSlotDisplays()
         if (slotCards[static_cast<size_t>(i)] == nullptr)
             continue;
 
-        slotCards[static_cast<size_t>(i)]->refreshFromSlotInfo(chain->getSlotInfo(i));
+        auto info = chain->getSlotInfo(i);
+        if (i == pendingAddSlotIndex && info.isEmpty && !info.missingPlugin && !info.isPlaceholder)
+        {
+            info.isPlaceholder = true;
+            info.slotDisplayName = "+ Pending";
+        }
+
+        slotCards[static_cast<size_t>(i)]->refreshFromSlotInfo(info);
         slotCards[static_cast<size_t>(i)]->setSelected(selectedSlotIndex == i);
     }
 
@@ -581,6 +761,8 @@ void RackViewComponent::refreshSlotDisplays()
         ctxReplaceButton.setButtonText((ctxInfo.isEmpty && !ctxInfo.missingPlugin) ? "Add" : "Replace");
     else
         ctxReplaceButton.setButtonText("Add");
+
+    layoutRackChain();
 }
 
 void RackViewComponent::wireSlotCallbacks(const int slotIndex)
@@ -641,26 +823,23 @@ void RackViewComponent::refreshAfterProjectHydration()
 
 void RackViewComponent::showPluginBrowser()
 {
-    if (selectedSlotIndex < 0)
+    if (pluginBrowser == nullptr || browserOverlay == nullptr)
+        return;
+
+    /** Pick or confirm logical target slot before opening (Add / Replace vs generic picker). */
+    if (browserOpenReason == BrowserOpenReason::ReplaceExistingSlot)
     {
-        auto* chain = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
-
-        if (chain == nullptr)
+        if (selectedSlotIndex < 0 || ! juce::isPositiveAndBelow(selectedSlotIndex, kPluginChainMaxSlots))
             return;
-
-        int emptySlot = -1;
-
-        for (int i = 0; i < kPluginChainMaxSlots; ++i)
-        {
-            const auto info = chain->getSlotInfo(i);
-
-            /** V1: treat "empty" as no loaded plugin; placeholders still occupy the slot. */
-            if (info.isEmpty && !info.missingPlugin)
-            {
-                emptySlot = i;
-                break;
-            }
-        }
+    }
+    else if (browserOpenReason == BrowserOpenReason::AddNewSlot)
+    {
+        if (pendingAddSlotIndex >= 0 && juce::isPositiveAndBelow(pendingAddSlotIndex, kPluginChainMaxSlots))
+            setSelectedSlot(pendingAddSlotIndex);
+    }
+    else if (selectedSlotIndex < 0)
+    {
+        const int emptySlot = findFirstEmptyBackendSlotIndex();
 
         if (emptySlot < 0)
         {
@@ -675,6 +854,29 @@ void RackViewComponent::showPluginBrowser()
         setSelectedSlot(emptySlot);
     }
 
+    juce::String reasonStr;
+
+    switch (browserOpenReason)
+    {
+        case BrowserOpenReason::None:
+            reasonStr = "None";
+            break;
+        case BrowserOpenReason::AddNewSlot:
+            reasonStr = "AddNewSlot";
+            break;
+        case BrowserOpenReason::ReplaceExistingSlot:
+            reasonStr = "ReplaceExistingSlot";
+            break;
+        default:
+            reasonStr = "?";
+            break;
+    }
+
+    const int tgt = resolveTargetSlotForPluginLoad();
+
+    Logger::info("FORGE7 RackAdd: browser open reason=" + reasonStr + " targetSlot=" + juce::String(tgt)
+                 + " selectedSlot=" + juce::String(selectedSlotIndex) + " pending=" + juce::String(pendingAddSlotIndex));
+
     pluginBrowser->rebuildList();
 
     browserOverlay->setBounds(getLocalBounds());
@@ -688,13 +890,47 @@ void RackViewComponent::showPluginBrowser()
     syncEncoderFocus();
 }
 
-void RackViewComponent::hidePluginBrowser()
+void RackViewComponent::dismissPluginBrowserOverlay(const bool cancelled)
 {
+    /** Snapshot BEFORE mutating loading state (successful load clears `browserOpenReason` before dismissal). */
+    const BrowserOpenReason snapReason = browserOpenReason;
+    const int snapPending = pendingAddSlotIndex;
+    const int snapSelBefore = selectionBeforePendingAdd;
+
+    Logger::info("FORGE7 RackAdd: browser dismissed cancelled=" + juce::String(cancelled ? "true" : "false") + " snapReason="
+                 + juce::String((int)snapReason) + " snapPendingSlot=" + juce::String(snapPending) + " selectedSlot="
+                 + juce::String(selectedSlotIndex));
+
     if (browserOverlay != nullptr)
         browserOverlay->setVisible(false);
 
+    if (cancelled && snapReason == BrowserOpenReason::AddNewSlot && snapPending >= 0
+        && snapPending < kPluginChainMaxSlots)
+    {
+        auto* ch = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+        if (ch != nullptr)
+        {
+            const auto info = ch->getSlotInfo(snapPending);
+            /** Pure-empty slot restore (browse cancelled without assign). */
+            if (info.isEmpty && !info.missingPlugin && !info.isPlaceholder)
+            {
+                pendingAddSlotIndex = -1;
+                selectionBeforePendingAdd = -1;
+                setSelectedSlot(snapSelBefore);
+                Logger::info("FORGE7 RackAdd: cancel restored selection to " + juce::String(snapSelBefore));
+            }
+        }
+    }
+
+    browserOpenReason = BrowserOpenReason::None;
+
     if (appContext.encoderNavigator != nullptr)
         appContext.encoderNavigator->clearModalFocusChain();
+
+    refreshSlotDisplays();
+
+    repaint();
 
     syncEncoderFocus();
 }
@@ -706,7 +942,7 @@ bool RackViewComponent::isPluginBrowserVisible() const noexcept
 
 void RackViewComponent::closePluginBrowser()
 {
-    hidePluginBrowser();
+    dismissPluginBrowserOverlay(true);
 }
 
 void RackViewComponent::syncEncoderFocus()
@@ -730,6 +966,9 @@ void RackViewComponent::syncEncoderFocus()
         if (slotCards[static_cast<size_t>(i)] == nullptr)
             continue;
 
+        if (!slotCards[static_cast<size_t>(i)]->isVisible())
+            continue;
+
         const int idx = i;
         items.push_back({ slotCards[static_cast<size_t>(i)].get(),
                          [this, idx]()
@@ -738,6 +977,9 @@ void RackViewComponent::syncEncoderFocus()
                          },
                          {} });
     }
+
+    if (addPluginCard != nullptr && addPluginCard->isVisible())
+        items.push_back({ addPluginCard.get(), [this]() { if (addPluginCard != nullptr) addPluginCard->onAddClicked(); }, {} });
 
     items.push_back({ &ctxMoveLeftButton, [this]() { ctxMoveLeftButton.triggerClick(); }, {} });
     items.push_back({ &ctxMoveRightButton, [this]() { ctxMoveRightButton.triggerClick(); }, {} });
@@ -759,31 +1001,175 @@ bool RackViewComponent::loadPluginIntoSelectedSlot(const juce::PluginDescription
     if (pluginBrowser != nullptr)
         pluginBrowser->clearLoadError();
 
-    if (appContext.pluginHostManager == nullptr || selectedSlotIndex < 0)
+    if (appContext.pluginHostManager == nullptr)
         return false;
+
+    const int targetSlot = resolveTargetSlotForPluginLoad();
+
+    if (! juce::isPositiveAndBelow(targetSlot, kPluginChainMaxSlots))
+    {
+        Logger::warn("FORGE7 RackAdd: invalid target slot resolved=" + juce::String(targetSlot));
+        return false;
+    }
 
     juce::String err;
 
-    Logger::info("FORGE7 PlayablePreset: RackView loadPluginIntoSelectedSlot slot=" + juce::String(selectedSlotIndex)
+    Logger::info("FORGE7 RackAdd: plugin chosen name=\"" + desc.name + "\" slot=" + juce::String(targetSlot)
+                 + " reason=" + juce::String((int)browserOpenReason));
+
+    Logger::info("FORGE7 PlayablePreset: RackView loadPluginIntoSelectedSlot slot=" + juce::String(targetSlot)
                  + " name=\"" + desc.name + "\" format=\"" + desc.pluginFormatName + "\"");
 
-    if (appContext.pluginHostManager->loadPluginIntoSlotSynchronously(desc, selectedSlotIndex, err))
+    if (! appContext.pluginHostManager->loadPluginIntoSlotSynchronously(desc, targetSlot, err))
     {
-        Logger::info("FORGE7 PlayablePreset: plugin load+assign OK slot=" + juce::String(selectedSlotIndex));
+        const juce::String msg =
+            err.isNotEmpty() ? err : juce::String("Could not load this plugin. Check install and format.");
+
+        Logger::warn("FORGE7 RackAdd: load failed slot=" + juce::String(targetSlot) + " err=" + msg);
+
+        if (pluginBrowser != nullptr)
+            pluginBrowser->setLoadErrorMessage(msg);
+
         refreshSlotDisplays();
-        return true;
+        return false;
     }
 
-    const juce::String msg =
-        err.isNotEmpty() ? err : juce::String("Could not load this plugin. Check install and format.");
+    Logger::info("FORGE7 PlayablePreset: plugin load+assign OK slot=" + juce::String(targetSlot));
 
-    Logger::warn("FORGE7 PlayablePreset: plugin load failed slot=" + juce::String(selectedSlotIndex) + " err=" + msg);
+    pendingAddSlotIndex = -1;
+    selectionBeforePendingAdd = -1;
+    browserOpenReason = BrowserOpenReason::None;
 
-    if (pluginBrowser != nullptr)
-        pluginBrowser->setLoadErrorMessage(msg);
+    setSelectedSlot(targetSlot);
+
+    const auto visSlots = getVisiblePluginSlotIndices();
+    juce::String visStr;
+    for (size_t v = 0; v < visSlots.size(); ++v)
+    {
+        visStr += juce::String(visSlots[v]);
+        if (v + 1 < visSlots.size())
+            visStr += ",";
+    }
+
+    const int nextAdd = findFirstEmptyBackendSlotIndex();
+
+    Logger::info("FORGE7 RackAdd: load success slot=" + juce::String(targetSlot) + " visibleSlots=" + visStr
+                 + " nextAddSlot=" + juce::String(nextAdd));
 
     refreshSlotDisplays();
-    return false;
+
+    return true;
+}
+
+bool RackViewComponent::rackSlotShowsContent(const SlotInfo& info) noexcept
+{
+    return (!info.isEmpty) || info.missingPlugin || info.isPlaceholder;
+}
+
+bool RackViewComponent::chainSlotShowsInRailLine(const int pendingAddSlotIdx, const int slotIdx, const SlotInfo& info) noexcept
+{
+    if (pendingAddSlotIdx == slotIdx && info.isEmpty && !info.missingPlugin && !info.isPlaceholder)
+        return true;
+
+    return rackSlotShowsContent(info);
+}
+
+int RackViewComponent::resolveTargetSlotForPluginLoad() const noexcept
+{
+    if (browserOpenReason == BrowserOpenReason::AddNewSlot && pendingAddSlotIndex >= 0 && pendingAddSlotIndex < kPluginChainMaxSlots)
+        return pendingAddSlotIndex;
+
+    return selectedSlotIndex;
+}
+
+int RackViewComponent::findFirstEmptyBackendSlotIndex() const noexcept
+{
+    auto* chain = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+    if (chain == nullptr)
+        return -1;
+
+    for (int i = 0; i < kPluginChainMaxSlots; ++i)
+    {
+        const auto info = chain->getSlotInfo(i);
+
+        if (info.isEmpty && !info.missingPlugin && !info.isPlaceholder)
+            return i;
+    }
+
+    return -1;
+}
+
+void RackViewComponent::compactChainLeadingGapsFromPluginLoads()
+{
+    if (isPluginBrowserVisible())
+        return;
+
+    auto* chain = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+    if (chain == nullptr)
+        return;
+
+    bool moved = true;
+    int guard = 0;
+
+    while (moved && guard++ < 64)
+    {
+        moved = false;
+
+        for (int i = 1; i < kPluginChainMaxSlots; ++i)
+        {
+            const auto prevInfo = chain->getSlotInfo(i - 1);
+            const auto currInfo = chain->getSlotInfo(i);
+
+            const bool prevPureEmpty = prevInfo.isEmpty && !prevInfo.missingPlugin && !prevInfo.isPlaceholder;
+
+            if (! prevPureEmpty)
+                continue;
+
+            if (! rackSlotShowsContent(currInfo))
+                continue;
+
+            if (chain->moveSlot(i, i - 1))
+            {
+                if (selectedSlotIndex == i)
+                    selectedSlotIndex = i - 1;
+
+                if (pendingAddSlotIndex == i)
+                    pendingAddSlotIndex = i - 1;
+
+                moved = true;
+                break;
+            }
+        }
+    }
+}
+
+std::vector<int> RackViewComponent::getVisiblePluginSlotIndices() const
+{
+    std::vector<int> out;
+
+    auto* chain = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+    if (chain == nullptr)
+        return out;
+
+    int lastUsed = -1;
+
+    for (int i = 0; i < kPluginChainMaxSlots; ++i)
+    {
+        const auto info = chain->getSlotInfo(i);
+
+        if (chainSlotShowsInRailLine(pendingAddSlotIndex, i, info))
+            lastUsed = i;
+        else
+            break;
+    }
+
+    for (int i = 0; i <= lastUsed; ++i)
+        out.push_back(i);
+
+    return out;
 }
 
 } // namespace forge7
