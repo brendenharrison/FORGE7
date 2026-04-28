@@ -47,7 +47,17 @@ private:
     SlotInfo lastInfo {};
     bool showInlineControls { true };
 
+    juce::Rectangle<int> thumbnailBounds {};
+
     void syncLabelsFromInfo();
+
+    // TODO: In a later version, optionally support cached plugin editor screenshots where safe.
+    // For now, generated thumbnails are used because VST editors do not reliably provide scalable
+    // thumbnails and should not be instantiated only for rack previews.
+    void drawPluginThumbnail(juce::Graphics& g, juce::Rectangle<int> area);
+    juce::String getPluginInitials(const juce::String& pluginName) const;
+    juce::Colour getPluginAccentColour(const juce::String& pluginName,
+                                       const juce::String& manufacturer) const;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RackSlotCard)
 };
