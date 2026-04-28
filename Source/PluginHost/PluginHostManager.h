@@ -24,9 +24,10 @@ class ChainVariation;
  * Threading (**never scan or instantiate on the audio callback**):
  * - **Audio thread**: only `processMonoBlock`, `prepareToPlay`, `releaseResources`; **no allocations**
  *   on the inner path (scratch buffers sized in `prepareToPlay`).
- * - **Background worker**: disk scanning (`PluginDirectoryScanner`), `createPluginInstance` — both may block.
- * - **Message thread**: completion callbacks (`MessageManager::callAsync`), applying instances to slots,
- *   `hydratePluginChainFromChainVariation`, `commitChainVariationCrossfade`.
+ * - **Message thread**: VST3 discovery (`PluginDirectoryScanner`), plugin UI, slot/plugin wiring,
+ *   completion callbacks (`MessageManager::callAsync`), `hydratePluginChainFromChainVariation`,
+ *   `commitChainVariationCrossfade`. VST3 scans must not run on ad-hoc worker threads on macOS.
+ * - **Background worker**: optional `createPluginInstance` worker paths — may block.
 
  * Variation switching: the **non-audible** chain is hydrated from the target `ChainVariation` snapshot
  * on the message thread **before** the fade is armed — **no plugin loads inside** `processMonoBlock`. */
@@ -58,10 +59,13 @@ public:
     /** Blocking VST3-only scan using registered VST3 `AudioPluginFormat`. Returns descriptions added this pass. */
     int scanVST3PluginsBlocking();
 
-    /** Worker thread runs `scanVST3PluginsBlocking`; completion on message thread with added count. */
+    /** Queues `scanVST3PluginsBlocking` on the **message thread** (never a raw worker thread).
+
+        Many macOS VST3 binaries assume main-thread TLS / Obj-C runtime when `PluginDirectoryScanner`
+        loads them; scanning from `juce::Thread::launch` can crash (e.g. EXC_BAD_ACCESS in `pthread_getspecific`). */
     void scanVST3PluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
 
-    /** Worker thread runs scan; completion invoked on message thread (`numDescriptionsAdded`). */
+    /** Same as `scanVST3PluginsAsync` (VST3 scan runs on the message thread). */
     void scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
 
     /** Same as `getKnownPluginDescriptionCount()` — total entries in `KnownPluginList` under lock. */

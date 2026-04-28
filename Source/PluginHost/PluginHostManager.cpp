@@ -115,6 +115,39 @@ juce::AudioPluginFormat* findVst3Format(juce::AudioPluginFormatManager& fm)
     return nullptr;
 }
 
+/** JUCE writes paths here immediately before each plugin probe; if the process crashes mid-load,
+ * the path remains so the next launch blacklists it and scans remaining plugins first. */
+juce::File getDeadMansPedalFile()
+{
+    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+        .getChildFile("FORGE7")
+        .getChildFile("dead_mans_pedal.txt");
+}
+
+/** Bundles known to fault the host during `PluginDirectoryScanner` / `findAllTypesForFile` (not fixable here).
+
+    Auburn Sounds Graillon 2 (x86_64): crashes in D runtime TLS (`pthread_getspecific` → `_D2rt…getTLSRange`)
+    even on the main thread — skip by bundle path substring. */
+bool isBuiltinSkippedVst3Path(const juce::String& fullPath)
+{
+    const juce::String p = fullPath.toLowerCase();
+    return p.contains("graillon");
+}
+
+void removeBuiltinSkippedVst3Bundles(juce::StringArray& pluginPaths)
+{
+    for (int i = pluginPaths.size(); --i >= 0;)
+    {
+        if (isBuiltinSkippedVst3Path(pluginPaths[i]))
+        {
+            Logger::warn(
+                "FORGE7: skipping VST3 bundle (incompatible with in-process scan on this platform) — "
+                + pluginPaths[i]);
+            pluginPaths.remove(i);
+        }
+    }
+}
+
 } // namespace
 
 PluginHostManager::PluginHostManager()
@@ -266,7 +299,7 @@ void PluginHostManager::addStandardPlatformScanDirectories()
 
 int PluginHostManager::scanVST3PluginsBlocking()
 {
-    Logger::info("FORGE7: VST3 scan starting (blocking worker)");
+    Logger::info("FORGE7: VST3 scan starting");
 
     auto* vst3Format = findVst3Format(formatManager);
 
@@ -299,18 +332,30 @@ int PluginHostManager::scanVST3PluginsBlocking()
     Logger::info("FORGE7: PluginDirectoryScanner — VST3 only; num paths: " + juce::String(searchPaths.getNumPaths())
                  + "; " + searchPaths.toString());
 
+    const juce::File deadMansPedal = getDeadMansPedalFile();
+
+    if (!deadMansPedal.getParentDirectory().createDirectory())
+        Logger::warn("FORGE7: could not create application data folder for dead man's pedal — "
+                     + deadMansPedal.getParentDirectory().getFullPathName());
+
+    Logger::info("FORGE7: dead man's pedal file — " + deadMansPedal.getFullPathName());
+
     juce::PluginDirectoryScanner scanner(knownPluginList,
                                          *vst3Format,
                                          searchPaths,
                                          true,
-                                         juce::File(),
+                                         deadMansPedal,
                                          false);
+
+    juce::StringArray pathsToScan = vst3Format->searchPathsForPlugins(searchPaths, true, false);
+    removeBuiltinSkippedVst3Bundles(pathsToScan);
+    scanner.setFilesOrIdentifiersToScan(pathsToScan);
 
     juce::String nameBeingScanned;
 
     while (scanner.scanNextFile(true, nameBeingScanned))
     {
-        juce::ignoreUnused(nameBeingScanned);
+        Logger::info("FORGE7: VST3 scanned OK — " + nameBeingScanned);
 
         if (shutdownFlag.load(std::memory_order_relaxed))
             break;
@@ -334,29 +379,29 @@ void PluginHostManager::scanVST3PluginsAsync(std::function<void(int numDescripti
 {
     auto callback = std::move(onFinished);
 
-    Logger::info("FORGE7: VST3 scan scheduled — async worker thread");
+    Logger::info(
+        "FORGE7: VST3 scan scheduled — message thread (plugin dylibs must not load on background worker threads)");
 
-    juce::Thread::launch([this, cb = std::move(callback)]() mutable
-                         {
-                             Logger::info("FORGE7: VST3 scan worker started");
+    if (juce::MessageManager::getInstanceWithoutCreating() == nullptr)
+    {
+        Logger::error("FORGE7: VST3 scan aborted — MessageManager not available");
 
-                             const int added = scanVST3PluginsBlocking();
+        if (callback != nullptr)
+            callback(0);
 
-                             if (cb != nullptr && juce::MessageManager::getInstanceWithoutCreating() != nullptr)
-                                 juce::MessageManager::callAsync([cb = std::move(cb), added]() mutable
-                                                                 {
-                                                                     Logger::info(
-                                                                         "FORGE7: VST3 scan UI callback — added "
-                                                                         + juce::String(added));
+        return;
+    }
 
-                                                                     cb(added);
-                                                                 });
-                             else if (cb != nullptr)
-                             {
-                                 Logger::warn(
-                                     "FORGE7: VST3 scan finished but MessageManager unavailable — UI callback skipped");
-                             }
-                         });
+    juce::MessageManager::callAsync([this, cb = std::move(callback)]() mutable
+                                      {
+                                          const int added = scanVST3PluginsBlocking();
+
+                                          Logger::info("FORGE7: VST3 scan complete on message thread — added "
+                                                       + juce::String(added));
+
+                                          if (cb != nullptr)
+                                              cb(added);
+                                      });
 }
 
 void PluginHostManager::scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
