@@ -14,6 +14,17 @@
 namespace forge7
 {
 
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+void MainComponent::SimHwDrawer::paint(juce::Graphics& g)
+{
+    // Dark drawer background so it reads as a panel.
+    g.fillAll(juce::Colour(0xff0f1217));
+
+    g.setColour(juce::Colour(0xff1b2028));
+    g.drawRect(getLocalBounds(), 1);
+}
+#endif
+
 MainComponent::MainComponent(AppContext& context)
     : appContext(context)
 {
@@ -63,6 +74,12 @@ MainComponent::MainComponent(AppContext& context)
     simulatedControlsDrawer.setVisible(false);
     simulatedControlsDrawer.setInterceptsMouseClicks(true, true);
     addChildComponent(simulatedControlsDrawer);
+
+    simulatedControlsTitleLabel.setText("Sim Hardware", juce::dontSendNotification);
+    simulatedControlsTitleLabel.setJustificationType(juce::Justification::centredLeft);
+    simulatedControlsTitleLabel.setFont(juce::Font(15.0f));
+    simulatedControlsTitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe8eaed));
+    simulatedControlsDrawer.addAndMakeVisible(simulatedControlsTitleLabel);
 
     simulatedControlsHideButton.onClick = [this]() { hideSimulatedControlsPanel(); };
     simulatedControlsDrawer.addAndMakeVisible(simulatedControlsHideButton);
@@ -122,11 +139,23 @@ void MainComponent::resized()
 
         auto inner = simulatedControlsDrawer.getLocalBounds().reduced(10);
         auto topRow = inner.removeFromTop(34);
+        simulatedControlsTitleLabel.setBounds(topRow.removeFromLeft(juce::jmax(120, topRow.getWidth() - 100)));
         simulatedControlsHideButton.setBounds(topRow.removeFromRight(92).reduced(0, 4));
         inner.removeFromTop(6);
 
         if (simulatedControlsViewport != nullptr)
+        {
             simulatedControlsViewport->setBounds(inner);
+            simulatedControlsViewport->setScrollBarsShown(true, false);
+        }
+
+        // Viewport doesn't size its viewed component; we must set an explicit size so content is visible + scrollable.
+        if (simulatedControlsPanel != nullptr && simulatedControlsViewport != nullptr)
+        {
+            const int contentW = juce::jmax(280, simulatedControlsViewport->getWidth() - 18);
+            const int contentH = juce::jmax(860, simulatedControlsViewport->getHeight());
+            simulatedControlsPanel->setSize(contentW, contentH);
+        }
     }
     else
     {
@@ -156,7 +185,12 @@ void MainComponent::showSimulatedControlsPanel()
     simulatedControlsDrawer.toFront(true);
     resized();
 
-    Logger::info("FORGE7 SimHW: showing in-app drawer bounds=" + simulatedControlsDrawer.getBounds().toString());
+    Logger::info("FORGE7 SimHW: drawer bounds=" + simulatedControlsDrawer.getBounds().toString());
+    if (simulatedControlsViewport != nullptr)
+        Logger::info("FORGE7 SimHW: viewport bounds=" + simulatedControlsViewport->getBounds().toString());
+    if (simulatedControlsPanel != nullptr)
+        Logger::info("FORGE7 SimHW: content size=" + juce::String(simulatedControlsPanel->getWidth())
+                     + "x" + juce::String(simulatedControlsPanel->getHeight()));
 }
 
 void MainComponent::hideSimulatedControlsPanel()

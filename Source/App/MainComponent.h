@@ -66,7 +66,14 @@ private:
     std::unique_ptr<FullscreenPluginEditorComponent> fullscreenPluginEditor;
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
-    juce::Component simulatedControlsDrawer;
+    class SimHwDrawer final : public juce::Component
+    {
+    public:
+        void paint(juce::Graphics& g) override;
+    };
+
+    SimHwDrawer simulatedControlsDrawer;
+    juce::Label simulatedControlsTitleLabel;
     juce::TextButton simulatedControlsHideButton { "Hide" };
     std::unique_ptr<SimulatedControlsComponent> simulatedControlsPanel;
     std::unique_ptr<juce::Viewport> simulatedControlsViewport;
