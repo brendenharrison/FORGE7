@@ -96,7 +96,7 @@ public:
 
         g.setColour(perfMuted());
         g.setFont(juce::Font(13.0f));
-        g.drawFittedText(title.isNotEmpty() ? title : juce::String("—"),
+        g.drawFittedText(title.isNotEmpty() ? title : juce::String("-"),
                          juce::Rectangle<int>(getLocalBounds().reduced(10, 8).removeFromTop(20)),
                          juce::Justification::centred,
                          2);
@@ -139,7 +139,7 @@ public:
 
         g.setColour(perfText());
         g.setFont(juce::Font(17.0f));
-        g.drawFittedText(valueText.isNotEmpty() ? valueText : juce::String("—"),
+        g.drawFittedText(valueText.isNotEmpty() ? valueText : juce::String("-"),
                            getLocalBounds().removeFromBottom(28).reduced(8, 0),
                            juce::Justification::centred,
                            1);
@@ -147,7 +147,7 @@ public:
 
 private:
     juce::String title;
-    juce::String valueText { "—" };
+    juce::String valueText { "-" };
     float normalized { 0.0f };
 };
 
@@ -184,7 +184,7 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     {
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
                                                  "Settings",
-                                                 "Global settings — coming soon.",
+                                                 "Global settings - coming soon.",
                                                  "OK");
     };
 
@@ -285,7 +285,7 @@ void PerformanceViewComponent::refreshHud()
 {
     juce::String sceneName { "Scene" };
     juce::String variationName { "Variation" };
-    juce::String bpmLine { "— BPM" };
+    juce::String bpmLine { "- BPM" };
 
     juce::String activeSceneId;
     juce::String activeVarId;
@@ -350,11 +350,11 @@ void PerformanceViewComponent::refreshHud()
             findMappingFor(mappingRows, activeSceneId, activeVarId, HardwareControlId::AssignButton2);
 
         assign1FunctionLabel.setText(mapA1 != nullptr && mapA1->displayName.isNotEmpty() ? mapA1->displayName
-                                                                                         : juce::String("—"),
+                                                                                         : juce::String("-"),
                                    juce::dontSendNotification);
 
         assign2FunctionLabel.setText(mapA2 != nullptr && mapA2->displayName.isNotEmpty() ? mapA2->displayName
-                                                                                         : juce::String("—"),
+                                                                                         : juce::String("-"),
                                    juce::dontSendNotification);
     }
 
@@ -367,7 +367,7 @@ void PerformanceViewComponent::refreshHud()
                                        + juce::String(variationCountDisplay),
                                    juce::dontSendNotification);
     else
-        chainVarIndexLabel.setText("—", juce::dontSendNotification);
+        chainVarIndexLabel.setText("-", juce::dontSendNotification);
 
     if (appContext.controlManager != nullptr)
     {

@@ -6,7 +6,7 @@ namespace forge7
 {
 
 /** Thin wrapper around juce::Logger for consistent tagging and optional file sinks.
-    Must not be invoked from AudioEngine::audioDeviceIOCallback or any RT path — logging
+    Must not be invoked from AudioEngine::audioDeviceIOCallback or any RT path - logging
     can allocate and lock. Use only from message / worker threads. */
 class Logger
 {

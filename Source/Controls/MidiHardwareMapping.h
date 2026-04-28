@@ -8,7 +8,7 @@
 namespace forge7
 {
 
-/** Default MIDI → `HardwareControlId` layout for FORGE 7 development builds.
+/** Default MIDI -> `HardwareControlId` layout for FORGE 7 development builds.
 
     Edit fields at runtime via `MidiControlInput::setDevelopmentMapping` (message thread) or replace
     this struct later with persisted JSON / hardware profiles.
@@ -18,7 +18,7 @@ namespace forge7
     secondary CCs here without changing handler code. */
 struct DevelopmentMidiMapping
 {
-    /** Absolute 0…127 → normalized knob (CC numbers per knob). */
+    /** Absolute 0...127 -> normalized knob (CC numbers per knob). */
     std::array<int, 4> ccKnobs { { 20, 21, 22, 23 } };
 
     int noteAssignButton1 { 60 };

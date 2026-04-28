@@ -24,7 +24,7 @@ class CpuMeter;
 
     Shows `AudioProcessorEditor` when available, otherwise `GenericAudioProcessorEditor`.
 
-    Assignment Mode: pick a parameter from the list, then twist K1–K4 — `ParameterMappingManager`
+    Assignment Mode: pick a parameter from the list, then twist K1-K4 - `ParameterMappingManager`
     binds on first knob delta (see `prepareKnobAssignmentToNextHardwareMove`).
 
     Plugin UI is hosted inside `PluginEditorCanvas` so oversized VST editors scale/pan within the
@@ -81,7 +81,7 @@ private:
     juce::TextButton viewFitAll { "Fit All" };
     juce::TextButton viewActual100 { "100%" };
 
-    /** Owned first so destruction clears canvas → releases hosted editor before unique_ptr resets. */
+    /** Owned first so destruction clears canvas -> releases hosted editor before unique_ptr resets. */
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;
     PluginEditorCanvas pluginEditorCanvas;
 

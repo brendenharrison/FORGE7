@@ -52,7 +52,7 @@ void PluginChain::releaseResources()
 
 void PluginChain::processMonoBlock(float* monoInOut, int numSamples)
 {
-    // RT: non-blocking shared lock — if exclusive editing holds the mutex, skip FX this block (dry pass-through).
+    // RT: non-blocking shared lock - if exclusive editing holds the mutex, skip FX this block (dry pass-through).
     std::shared_lock<std::shared_mutex> sharedLock(chainMutex, std::try_to_lock);
     if (! sharedLock.owns_lock())
         return;
@@ -91,7 +91,7 @@ bool PluginChain::addPluginToSlot(int slotIndex,
     jassert(slot != nullptr);
 
     // Future VST3 / async loader: PluginHostManager.loadPluginIntoSlotAsync(...)
-    //   assigns via PluginChain::assignPluginToSlot → PluginSlot::assignHostedPlugin.
+    //   assigns via PluginChain::assignPluginToSlot -> PluginSlot::assignHostedPlugin.
     slot->loadPlaceholderPlugin(pluginIdentifier, slotDisplayName);
     return true;
 }

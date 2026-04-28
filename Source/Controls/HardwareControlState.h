@@ -7,7 +7,7 @@ namespace forge7
 {
 
 /** Thread-safe mirror of physical control state for GUI / HUD (atomics so audio-adjacent threads
-    can read without taking the control manager’s mutex).
+    can read without taking the control manager's mutex).
 
     Updated only from `ControlManager::submitHardwareEvent` (after normalization), never from raw drivers. */
 class HardwareControlState

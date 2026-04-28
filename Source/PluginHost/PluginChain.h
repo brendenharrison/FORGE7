@@ -13,7 +13,7 @@ class PluginSlot;
 
 constexpr int kPluginChainMaxSlots = 8;
 
-/** Snapshot for UI / serialization — safe to produce from the message thread via `getSlotInfo`. */
+/** Snapshot for UI / serialization - safe to produce from the message thread via `getSlotInfo`. */
 struct SlotInfo
 {
     int slotIndex = -1;
@@ -32,10 +32,10 @@ struct SlotInfo
 /** Fixed serial chain (V1 = 8 slots). Processes left-to-right: each slot receives the mono buffer in place.
 
     Threading:
-    - **`processMonoBlock` / `processBlock`**: real-time safe — walks fixed slot array, no heap
+    - **`processMonoBlock` / `processBlock`**: real-time safe - walks fixed slot array, no heap
       allocations; slot audio path uses atomics + pre-cleared shared `midiScratch`.
     - **`addPluginToSlot`, `removePluginFromSlot`, `moveSlot`, `clearChain`, `getSlotInfo`**:
-      message-thread / control thread — take an exclusive lock on `chainMutex`. The audio callback
+      message-thread / control thread - take an exclusive lock on `chainMutex`. The audio callback
       uses **`try_shared_lock`**; if editors hold the exclusive lock, **FX processing is skipped for
       that block** (audio still passes through upstream/downstream of the chain in `AudioEngine`).
 
@@ -52,13 +52,13 @@ public:
     /** Audio device prepares hosted processors once formats + instances exist. */
     void prepareToPlay(double sampleRate, int maximumExpectedSamplesPerBlock);
 
-    /** Release hosted processors — not from inside `processMonoBlock`. */
+    /** Release hosted processors - not from inside `processMonoBlock`. */
     void releaseResources();
 
-    /** Serial mono RT processing in fixed slot order — allocation-free hot path. */
+    /** Serial mono RT processing in fixed slot order - allocation-free hot path. */
     void processMonoBlock(float* monoInOut, int numSamples);
 
-    /** Alias requested for symmetry with future stereo `AudioBuffer` overloads — same mono path as `processMonoBlock`. */
+    /** Alias requested for symmetry with future stereo `AudioBuffer` overloads - same mono path as `processMonoBlock`. */
     void processBlock(float* monoInOut, int numSamples);
 
     /** Register placeholder metadata (pass-through audio until real instance is wired). Message thread only. */
@@ -76,14 +76,14 @@ public:
 
     void clearChain();
 
-    /** Inspect slot metadata for menus / inspectors — shared lock on `chainMutex`. */
+    /** Inspect slot metadata for menus / inspectors - shared lock on `chainMutex`. */
     SlotInfo getSlotInfo(int slotIndex) const;
 
     PluginSlot* getSlot(size_t slotIndex) noexcept;
 
     const PluginSlot* getSlot(size_t slotIndex) const noexcept;
 
-    /** Host-managed load: installs instance under exclusive lock — never call from audio callback. */
+    /** Host-managed load: installs instance under exclusive lock - never call from audio callback. */
     bool assignPluginToSlot(int slotIndex,
                            std::unique_ptr<juce::AudioPluginInstance> instance,
                            const juce::PluginDescription& description,
@@ -95,7 +95,7 @@ private:
 
     SlotArray slots;
 
-    /** Cleared once per audio block — avoids per-slot `MidiBuffer` construction during guitar FX chain. */
+    /** Cleared once per audio block - avoids per-slot `MidiBuffer` construction during guitar FX chain. */
     juce::MidiBuffer midiScratch;
 
     mutable std::shared_mutex chainMutex;

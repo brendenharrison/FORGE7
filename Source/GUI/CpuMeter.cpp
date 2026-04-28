@@ -25,7 +25,7 @@ void CpuMeter::timerCallback()
     }
     else
     {
-        cpuLabel = "CPU —%";
+        cpuLabel = "CPU -%";
     }
 
     repaint();

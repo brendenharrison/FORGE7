@@ -85,7 +85,7 @@ void ControlManager::applyEventToState(const HardwareControlEvent& e)
 
 void ControlManager::routeThroughMappingStub(const HardwareControlEvent& e)
 {
-    /** Knobs + assign buttons only — chain/navigation handled elsewhere (`invokeSceneNavigationIfAttached`). */
+    /** Knobs + assign buttons only - chain/navigation handled elsewhere (`invokeSceneNavigationIfAttached`). */
     if (e.type == HardwareControlType::AbsoluteNormalized && isKnobId(e.id))
     {
         parameterMappingManager.processHardwareEvent(e);
@@ -144,7 +144,7 @@ void ControlManager::submitHardwareEvent(HardwareControlEvent event)
     // Always safe: atomics only, safe from MIDI / serial threads.
     applyEventToState(event);
 
-    /** Mapping, scene hydration, and listeners require the message thread — bundle so order is fixed. */
+    /** Mapping, scene hydration, and listeners require the message thread - bundle so order is fixed. */
     auto deliver = [this, event]()
     {
         routeThroughMappingStub(event);

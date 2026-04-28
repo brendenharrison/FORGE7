@@ -62,13 +62,13 @@ void logVst3BundlesInFolder(const juce::File& dir)
 
     if (!dir.exists())
     {
-        Logger::warn("FORGE7 VST3 folder: " + path + " — path does not exist");
+        Logger::warn("FORGE7 VST3 folder: " + path + " - path does not exist");
         return;
     }
 
     if (!dir.isDirectory())
     {
-        Logger::warn("FORGE7 VST3 folder: " + path + " — exists but is not a directory");
+        Logger::warn("FORGE7 VST3 folder: " + path + " - exists but is not a directory");
         return;
     }
 
@@ -278,11 +278,11 @@ int PluginHostManager::scanVST3PluginsBlocking()
     if (vst3Format == nullptr)
     {
         Logger::error(
-            "FORGE7 ERROR: VST3 format is not registered — cannot scan. Enable JUCE_PLUGINHOST_VST3 or equivalent.");
+            "FORGE7 ERROR: VST3 format is not registered - cannot scan. Enable JUCE_PLUGINHOST_VST3 or equivalent.");
         return 0;
     }
 
-    Logger::info("FORGE7: using VST3 scanner format — \"" + vst3Format->getName() + "\"");
+    Logger::info("FORGE7: using VST3 scanner format - \"" + vst3Format->getName() + "\"");
 
     const juce::ScopedLock plist(pluginListLock);
     const juce::ScopedLock folders(scanFoldersLock);
@@ -298,13 +298,13 @@ int PluginHostManager::scanVST3PluginsBlocking()
         if (dir.isDirectory())
             searchPaths.add(dir);
         else
-            Logger::warn("FORGE7: skipping scanner path (not a directory) — " + dir.getFullPathName());
+            Logger::warn("FORGE7: skipping scanner path (not a directory) - " + dir.getFullPathName());
     }
 
-    Logger::info("FORGE7: VST3 scan — paths: " + juce::String(searchPaths.getNumPaths()) + "; "
+    Logger::info("FORGE7: VST3 scan - paths: " + juce::String(searchPaths.getNumPaths()) + "; "
                  + searchPaths.toString());
 
-    Logger::info("FORGE7: plugin scan skips file — " + pluginScanSkips.getSkipsFile().getFullPathName());
+    Logger::info("FORGE7: plugin scan skips file - " + pluginScanSkips.getSkipsFile().getFullPathName());
 
     pluginScanSkips.pruneStaleEntries();
     pluginScanSkips.save();
@@ -319,7 +319,7 @@ int PluginHostManager::scanVST3PluginsBlocking()
 
         if (pluginScanSkips.shouldSkipScanning(bundlePath))
         {
-            Logger::warn("FORGE7: skipping VST3 (stored skip matches this bundle revision) — " + bundlePath);
+            Logger::warn("FORGE7: skipping VST3 (stored skip matches this bundle revision) - " + bundlePath);
             continue;
         }
 
@@ -340,7 +340,7 @@ int PluginHostManager::scanVST3PluginsBlocking()
         pluginScanSkips.clearPendingProbe();
 
         if (typesFound.size() > 0)
-            Logger::info("FORGE7: VST3 scanned OK — " + bundle.getFileName());
+            Logger::info("FORGE7: VST3 scanned OK - " + bundle.getFileName());
 
         if (shutdownFlag.load(std::memory_order_relaxed))
             break;
@@ -351,7 +351,7 @@ int PluginHostManager::scanVST3PluginsBlocking()
     const size_t countAfter = knownPluginList.getTypes().size();
     const int added = static_cast<int>(countAfter - countBefore);
 
-    Logger::info("FORGE7: VST3 scan finished — added this pass: " + juce::String(added)
+    Logger::info("FORGE7: VST3 scan finished - added this pass: " + juce::String(added)
                  + ", knownPluginList total: " + juce::String(static_cast<int>(countAfter)));
 
     return added;
@@ -367,11 +367,11 @@ void PluginHostManager::scanVST3PluginsAsync(std::function<void(int numDescripti
     auto callback = std::move(onFinished);
 
     Logger::info(
-        "FORGE7: VST3 scan scheduled — message thread (plugin dylibs must not load on background worker threads)");
+        "FORGE7: VST3 scan scheduled - message thread (plugin dylibs must not load on background worker threads)");
 
     if (juce::MessageManager::getInstanceWithoutCreating() == nullptr)
     {
-        Logger::error("FORGE7: VST3 scan aborted — MessageManager not available");
+        Logger::error("FORGE7: VST3 scan aborted - MessageManager not available");
 
         if (callback != nullptr)
             callback(0);
@@ -383,7 +383,7 @@ void PluginHostManager::scanVST3PluginsAsync(std::function<void(int numDescripti
                                       {
                                           const int added = scanVST3PluginsBlocking();
 
-                                          Logger::info("FORGE7: VST3 scan complete on message thread — added "
+                                          Logger::info("FORGE7: VST3 scan complete on message thread - added "
                                                        + juce::String(added));
 
                                           if (cb != nullptr)
@@ -521,7 +521,7 @@ void PluginHostManager::loadPluginIntoSlotAsync(const juce::PluginDescription& d
 
                                                                      if (instanceLocal == nullptr)
                                                                      {
-                                                                         Logger::error("FORGE7: plugin instantiation failed — "
+                                                                         Logger::error("FORGE7: plugin instantiation failed - "
                                                                                        + instantiationError);
 
                                                                          if (completion != nullptr)
@@ -541,7 +541,7 @@ void PluginHostManager::loadPluginIntoSlotAsync(const juce::PluginDescription& d
                                                                                                             slotIndex,
                                                                                                             assignErr))
                                                                      {
-                                                                         Logger::error("FORGE7: assign to slot failed — "
+                                                                         Logger::error("FORGE7: assign to slot failed - "
                                                                                        + assignErr);
 
                                                                          if (completion != nullptr)
@@ -586,7 +586,7 @@ bool PluginHostManager::loadPluginIntoSlotSynchronously(const juce::PluginDescri
     {
         errorMessageOut = instantiationError.isNotEmpty() ? instantiationError : juce::String("Instantiation failed");
 
-        Logger::warn("FORGE7: synchronous plugin load failed — " + errorMessageOut);
+        Logger::warn("FORGE7: synchronous plugin load failed - " + errorMessageOut);
 
         return false;
     }
@@ -632,11 +632,11 @@ void PluginHostManager::hydratePluginChainFromChainVariation(PluginChain& chain,
                 instance->setStateInformation(preset.getData(), static_cast<int>(preset.getSize()));
 
             if (! chain.assignPluginToSlot(i, std::move(instance), pd, sr, bs))
-                Logger::warn("FORGE7: hydrate — could not assign plugin to slot " + juce::String(i));
+                Logger::warn("FORGE7: hydrate - could not assign plugin to slot " + juce::String(i));
         }
         else
         {
-            Logger::warn("FORGE7: hydrate — missing plugin (slot " + juce::String(i) + "): " + err);
+            Logger::warn("FORGE7: hydrate - missing plugin (slot " + juce::String(i) + "): " + err);
 
             slot->loadPlaceholderPlugin(pd.createIdentifierString(),
                                         pd.name.isNotEmpty() ? pd.name : pd.descriptiveName);
@@ -717,7 +717,7 @@ bool PluginHostManager::isVariationCrossfadeActive() const noexcept
 
 void PluginHostManager::processMonoBlock(float* monoInOut, int numSamples)
 {
-    // RT: **no heap allocation** — scratch vectors are sized only in `prepareToPlay`.
+    // RT: **no heap allocation** - scratch vectors are sized only in `prepareToPlay`.
     if (monoInOut == nullptr || numSamples <= 0)
         return;
 

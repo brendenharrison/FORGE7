@@ -12,19 +12,19 @@ namespace forge7
 
     Future **GUI learn** workflow (not implemented): inspector stores `hardwareControlId` +
     `(sceneId, chainVariationId)` as today, but `pluginParameterId` is discovered by intercepting the
-    next parameter gesture from `AudioProcessorEditor` / attachment — see `ParameterMappingManager::armLearnTargetForHardware`.
+    next parameter gesture from `AudioProcessorEditor` / attachment - see `ParameterMappingManager::armLearnTargetForHardware`.
 
     **Value scaling**
-    - Knobs: hardware sends normalized 0…1 (`HardwareControlType::AbsoluteNormalized`). We map linearly
-      into `[minValue, maxValue]` where both are **plugin-normalized** 0…1 (`AudioProcessorParameter`
+    - Knobs: hardware sends normalized 0...1 (`HardwareControlType::AbsoluteNormalized`). We map linearly
+      into `[minValue, maxValue]` where both are **plugin-normalized** 0...1 (`AudioProcessorParameter`
       domain), then apply `invert` to the hardware side before scaling.
 
     **Buttons** (`AssignButton1` / `AssignButton2`)
-    - `momentaryMode`: pressed → `maxValue`, released → `minValue` (typical “hold” behaviour).
+    - `momentaryMode`: pressed -> `maxValue`, released -> `minValue` (typical "hold" behaviour).
     - `toggleMode`: each press alternates between `minValue` and `maxValue` (used for bool/switch params).
 
     Threading: edit descriptors only from the **message thread**. `ParameterMappingManager` applies
-    parameters on the message thread — never from `audioDeviceIOCallback`. */
+    parameters on the message thread - never from `audioDeviceIOCallback`. */
 struct ParameterMappingDescriptor
 {
     HardwareControlId hardwareControlId { HardwareControlId::Knob1 };
@@ -42,7 +42,7 @@ struct ParameterMappingDescriptor
 
     juce::String displayName;
 
-    /** Plugin-normalized range endpoints (0…1) applied to this parameter. Defaults = full sweep. */
+    /** Plugin-normalized range endpoints (0...1) applied to this parameter. Defaults = full sweep. */
     float minValue { 0.0f };
     float maxValue { 1.0f };
 

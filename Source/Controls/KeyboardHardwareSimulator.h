@@ -9,7 +9,7 @@ class ControlManager;
 
 /** Development-only: maps QWERTY keys to `HardwareControlEvent` via `ControlManager::submitHardwareEvent`.
 
-    Attach to the root `Component` and give it keyboard focus — **not** for production; replace with
+    Attach to the root `Component` and give it keyboard focus - **not** for production; replace with
     USB serial / GPIO when hardware exists.
 
     Optional **press-and-rotate** can be layered later (track modifier + encoder delta). */

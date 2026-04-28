@@ -4,7 +4,7 @@
  * - Increment `projectFileVersion` whenever the on-disk schema changes incompatibly.
  * - In `loadProjectFromFile`, branch on `projectFileVersion` and either:
  *   (a) parse legacy shapes into the current in-memory model, or
- *   (b) run small upgrade steps (v1→v2→v3) so older files still open.
+ *   (b) run small upgrade steps (v1->v2->v3) so older files still open.
  * - Prefer additive keys for minor changes so older app versions can skip unknown fields.
  * - Never remove old parser branches until you no longer support those shipped releases.
  */
@@ -329,7 +329,7 @@ juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file, Plugin
     if (! file.replaceWithText(jsonText))
         return juce::Result::fail("FORGE7: could not write project file");
 
-    Logger::info("FORGE7: saved project — " + file.getFullPathName());
+    Logger::info("FORGE7: saved project - " + file.getFullPathName());
 
     return juce::Result::ok();
 }
@@ -355,7 +355,7 @@ juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file, Plug
     const auto parseResult = juce::JSON::parse(jsonText, parsed);
 
     if (parseResult.failed())
-        return juce::Result::fail("FORGE7: invalid JSON — " + parseResult.getErrorMessage());
+        return juce::Result::fail("FORGE7: invalid JSON - " + parseResult.getErrorMessage());
 
     auto* root = parsed.getDynamicObject();
 
@@ -406,7 +406,7 @@ juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file, Plug
         hydrateActiveVariationIntoHost(*hydrateIntoHost);
     }
 
-    Logger::info("FORGE7: loaded project — " + file.getFullPathName());
+    Logger::info("FORGE7: loaded project - " + file.getFullPathName());
 
     return juce::Result::ok();
 }

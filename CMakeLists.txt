@@ -50,3 +50,10 @@ target_compile_definitions(Forge7 PRIVATE
     # Required for VST3 format registration in AudioPluginFormatManager::addDefaultFormats().
     JUCE_PLUGINHOST_VST3=1
 )
+
+# Optional dev-only guard: ensure no non-ASCII characters exist in Source/ (prevents mojibake regressions).
+add_custom_target(check_ascii_ui_text
+    COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/scripts/check_ascii_ui_text.py"
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    COMMENT "Checking Source/ for non-ASCII characters"
+)

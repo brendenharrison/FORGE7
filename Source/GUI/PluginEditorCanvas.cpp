@@ -301,10 +301,10 @@ void PluginEditorCanvas::toggleEncoderPanAxis() noexcept
 juce::String PluginEditorCanvas::getViewHudLine() const
 {
     const int pct = juce::jlimit(0, 999, juce::roundToInt(scale * 100.0f));
-    juce::String line = "View: " + viewModeLabel(viewMode) + " · Scale " + juce::String(pct) + "%";
+    juce::String line = "View: " + viewModeLabel(viewMode) + " - Scale " + juce::String(pct) + "%";
 
     if (canPanHorizontally() || canPanVertically())
-        line += " · Pan";
+        line += " - Pan";
 
     return line;
 }

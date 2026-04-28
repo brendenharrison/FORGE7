@@ -77,7 +77,7 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     appConfig = std::make_unique<AppConfig>();
 
     if (appConfig->loadOrCreateDefaults())
-        Logger::info("FORGE7: config — " + AppConfig::getDefaultConfigFile().getFullPathName());
+        Logger::info("FORGE7: config - " + AppConfig::getDefaultConfigFile().getFullPathName());
 
     pluginHostManager = std::make_unique<PluginHostManager>();
     sceneManager = std::make_unique<SceneManager>();
@@ -149,10 +149,10 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     // #endregion
 
     const bool cfgWantsSim = appConfig != nullptr && appConfig->getShowSimulatedControls();
-    Logger::info("FORGE7: simulated hardware window opened (Forge7 · Simulated Hardware). "
+    Logger::info("FORGE7: simulated hardware window opened (Forge7 - Simulated Hardware). "
                  "showSimulatedControls in config="
                  + juce::String(cfgWantsSim ? "true" : "false")
-                 + " — compile with FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=0 to omit the panel entirely.");
+                 + " - compile with FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=0 to omit the panel entirely.");
 #else
     // #region agent log
     debugAgentLog("H2", "ForgeApplication.cpp", "compile_time_devtools_disabled", juce::var(0));

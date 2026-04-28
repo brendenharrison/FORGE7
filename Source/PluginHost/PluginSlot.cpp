@@ -118,7 +118,7 @@ void PluginSlot::assignHostedPlugin(std::unique_ptr<juce::AudioPluginInstance> i
 
         if (! hostedInstance->setBusesLayout(monoLayout))
         {
-            // Some VST3 effects only expose stereo — leave enabled default layout from enableAllBuses().
+            // Some VST3 effects only expose stereo - leave enabled default layout from enableAllBuses().
             juce::ignoreUnused(monoLayout);
         }
 

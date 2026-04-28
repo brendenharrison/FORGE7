@@ -22,7 +22,7 @@ class CrossfadeMixer
 public:
     CrossfadeMixer() = default;
 
-    /** Not real-time — call from `prepareToPlay` only. `maximumBlockSamples` reserved for future
+    /** Not real-time - call from `prepareToPlay` only. `maximumBlockSamples` reserved for future
         SIMD alignment / partial-block staging (unused in v1). */
     void prepare(double sampleRate, int maximumBlockSamples);
 
@@ -53,7 +53,7 @@ private:
 
     double sampleRate { 48000.0 };
 
-    /** Default seamless chain switch length — prefer updating via `setCrossfadeTimeMs` for UX. */
+    /** Default seamless chain switch length - prefer updating via `setCrossfadeTimeMs` for UX. */
     double crossfadeTimeMs { 20.0 };
 
     std::atomic<uint64_t> fadeLengthSamples { 960 };

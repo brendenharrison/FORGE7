@@ -137,7 +137,7 @@ public:
         valueLabel.setColour(juce::Label::textColourId, mutedColour());
         addAndMakeVisible(valueLabel);
 
-        assignButton.setButtonText("Assign…");
+        assignButton.setButtonText("Assign...");
         styleSecondaryButton(assignButton);
         assignButton.onClick = [this]() { showAssignMenu(); };
         addAndMakeVisible(assignButton);
@@ -148,7 +148,7 @@ public:
 
     void refreshValueText()
     {
-        juce::String txt { "—" };
+        juce::String txt { "-" };
 
         if (appContext.pluginHostManager != nullptr)
         {
@@ -177,7 +177,7 @@ public:
     {
         if (appContext.parameterMappingManager == nullptr || appContext.sceneManager == nullptr)
         {
-            assignButton.setButtonText("Assign…");
+            assignButton.setButtonText("Assign...");
             return;
         }
 
@@ -185,7 +185,7 @@ public:
 
         if (scene == nullptr)
         {
-            assignButton.setButtonText("Assign…");
+            assignButton.setButtonText("Assign...");
             return;
         }
 
@@ -196,7 +196,7 @@ public:
 
         if (!juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) || vars[static_cast<size_t>(vi)] == nullptr)
         {
-            assignButton.setButtonText("Assign…");
+            assignButton.setButtonText("Assign...");
             return;
         }
 
@@ -208,7 +208,7 @@ public:
         if (const auto* found = findMappingForParameter(rows, sceneId, varId, slotIndex, summary))
             assignButton.setButtonText(juce::String("Mapped: ") + hardwareShortName(found->hardwareControlId));
         else
-            assignButton.setButtonText("Assign…");
+            assignButton.setButtonText("Assign...");
     }
 
     void resized() override
@@ -634,7 +634,7 @@ void PluginInspectorComponent::updateEmptyStateVisibility()
     if (!hasSlot)
         emptyHintLabel.setText("Select a rack slot to inspect plugins and map parameters.", juce::dontSendNotification);
     else if (!hasPlugin)
-        emptyHintLabel.setText("This slot is empty — load a plugin from Add Plugin.", juce::dontSendNotification);
+        emptyHintLabel.setText("This slot is empty - load a plugin from Add Plugin.", juce::dontSendNotification);
 }
 
 void PluginInspectorComponent::refreshHeader()
@@ -689,10 +689,10 @@ void PluginInspectorComponent::refreshHeader()
 
     pluginNameLabel.setText(nameLine, juce::dontSendNotification);
 
-    juce::String meta = manufacturer.isNotEmpty() ? manufacturer : juce::String("—");
+    juce::String meta = manufacturer.isNotEmpty() ? manufacturer : juce::String("-");
 
-    meta += "   ·   ";
-    meta += format.isNotEmpty() ? format : juce::String("—");
+    meta += "   -   ";
+    meta += format.isNotEmpty() ? format : juce::String("-");
 
     metaLabel.setText(meta, juce::dontSendNotification);
 

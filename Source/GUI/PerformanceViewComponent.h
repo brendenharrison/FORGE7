@@ -13,9 +13,9 @@ namespace forge7
 
 struct AppContext;
 
-/** Live performance screen: scene + chain variation, K1–K4, assigns, variation navigation,
+/** Live performance screen: scene + chain variation, K1-K4, assigns, variation navigation,
 
-    BPM/CPU — tuned for ~7\" embedded pedal use (minimal chrome). */
+    BPM/CPU - tuned for ~7\" embedded pedal use (minimal chrome). */
 class PerformanceViewComponent final : public juce::Component,
                                        private juce::Timer
 {
@@ -36,8 +36,8 @@ private:
     AppContext& appContext;
 
     juce::TextButton rackEditButton { "RACK" };
-    juce::TextButton chainPrevButton { "\u2212" };
-    juce::TextButton chainNextButton { "+" };
+    juce::TextButton chainPrevButton { "Var -" };
+    juce::TextButton chainNextButton { "Var +" };
     juce::TextButton settingsButton { "Settings" };
 
     juce::Label bpmStatusLabel;

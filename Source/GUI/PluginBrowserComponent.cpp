@@ -65,6 +65,7 @@ void splitColumns(const int innerWidth, int& wName, int& wMfg, int& wFmt, int& w
 PluginBrowserComponent::PluginBrowserComponent(PluginHostManager& hostManager)
     : pluginHostManager(hostManager)
 {
+    // Use ASCII-only UI strings for now to avoid source encoding/mojibake issues across macOS/Linux/embedded builds.
     titleLabel.setText("Plugins", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(22.0f));
@@ -82,7 +83,7 @@ PluginBrowserComponent::PluginBrowserComponent(PluginHostManager& hostManager)
     scanStatusLabel.setMinimumHorizontalScale(0.72f);
     addAndMakeVisible(scanStatusLabel);
 
-    filterEditor.setTextToShowWhenEmpty("Search plugins…", browserMuted());
+    filterEditor.setTextToShowWhenEmpty("Search plugins...", browserMuted());
     filterEditor.setColour(juce::TextEditor::backgroundColourId, browserBg().brighter(0.08f));
     filterEditor.setColour(juce::TextEditor::textColourId, browserText());
     filterEditor.setColour(juce::TextEditor::outlineColourId, browserAccent().withAlpha(0.35f));
@@ -102,7 +103,7 @@ PluginBrowserComponent::PluginBrowserComponent(PluginHostManager& hostManager)
     };
     addAndMakeVisible(filterEditor);
 
-    categoryPlaceholderLabel.setText("Categories — filters coming soon", juce::dontSendNotification);
+    categoryPlaceholderLabel.setText("Categories - filters coming soon", juce::dontSendNotification);
     categoryPlaceholderLabel.setJustificationType(juce::Justification::centred);
     categoryPlaceholderLabel.setFont(juce::Font(16.0f));
     categoryPlaceholderLabel.setColour(juce::Label::textColourId, browserMuted());
@@ -205,7 +206,7 @@ void PluginBrowserComponent::rebuildList()
     if (raw.size() > 0 && allDescriptions.isEmpty())
     {
         Logger::warn("FORGE7 Plugin Browser: KnownPluginList has " + juce::String(raw.size())
-                     + " entries but none matched the VST3 browser filter — sample rows:");
+                     + " entries but none matched the VST3 browser filter - sample rows:");
 
         for (int i = 0; i < juce::jmin(8, raw.size()); ++i)
         {
@@ -236,10 +237,10 @@ void PluginBrowserComponent::onScanPluginsClicked()
     scanInProgress = true;
     scanPluginsButton.setEnabled(false);
     scanStatusLabel.setColour(juce::Label::textColourId, browserText());
-    scanStatusLabel.setText("Scanning VST3 plugins…", juce::dontSendNotification);
+    scanStatusLabel.setText("Scanning VST3 plugins...", juce::dontSendNotification);
 
     Logger::info(
-        "FORGE7: Plugin Browser — Scan Plugins clicked; addStandardPlatformScanDirectories + scanVST3PluginsAsync");
+        "FORGE7: Plugin Browser - Scan Plugins clicked; addStandardPlatformScanDirectories + scanVST3PluginsAsync");
 
     pluginHostManager.addStandardPlatformScanDirectories();
 
@@ -276,7 +277,7 @@ void PluginBrowserComponent::onScanFinished(const int numAdded)
     syncAddButtonEnabled();
     listBox.repaint();
 
-    Logger::info("FORGE7: Plugin Browser — scan UI refresh complete; VST3 rows shown: "
+    Logger::info("FORGE7: Plugin Browser - scan UI refresh complete; VST3 rows shown: "
                  + juce::String(allDescriptions.size()));
 }
 
@@ -431,7 +432,7 @@ void PluginBrowserComponent::paintListBoxItem(const int rowNumber,
 
     g.setColour(browserMuted());
     g.setFont(juce::Font(14.5f));
-    g.drawText(d.manufacturerName.isNotEmpty() ? d.manufacturerName : "—",
+    g.drawText(d.manufacturerName.isNotEmpty() ? d.manufacturerName : "-",
                x + wName,
                yName,
                wMfg,
@@ -439,7 +440,7 @@ void PluginBrowserComponent::paintListBoxItem(const int rowNumber,
                juce::Justification::centredLeft,
                true);
 
-    g.drawText(d.pluginFormatName.isNotEmpty() ? d.pluginFormatName : "—",
+    g.drawText(d.pluginFormatName.isNotEmpty() ? d.pluginFormatName : "-",
                x + wName + wMfg,
                yName,
                wFmt,
@@ -447,7 +448,7 @@ void PluginBrowserComponent::paintListBoxItem(const int rowNumber,
                juce::Justification::centredLeft,
                true);
 
-    const juce::String compatLine = "\u2014";
+    const juce::String compatLine = "-";
     g.drawText(compatLine,
                x + wName + wMfg + wFmt,
                yName,

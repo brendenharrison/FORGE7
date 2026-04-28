@@ -157,7 +157,7 @@ float MidiControlInput::ccValueToNormalized(const int value7) noexcept
 
 float MidiControlInput::relativeCcToDelta(const int value7) noexcept
 {
-    /** Standard 7-bit “relative with center bias”: 64 = no movement. */
+    /** Standard 7-bit "relative with center bias": 64 = no movement. */
     return static_cast<float>(value7 - 64);
 }
 
@@ -165,7 +165,7 @@ void MidiControlInput::handleIncomingMidiMessage(juce::MidiInput* source, const 
 {
     juce::ignoreUnused(source);
 
-    /** Copy mapping under lock — short critical section; no plugin or audio graph access. */
+    /** Copy mapping under lock - short critical section; no plugin or audio graph access. */
     DevelopmentMidiMapping map;
     {
         const juce::ScopedLock lock(mappingLock);

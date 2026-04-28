@@ -213,8 +213,8 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
     const juce::String sceneId = scene->getSceneId();
     const juce::String variationId = variation->getVariationId();
 
-    /** Assign Mode (fullscreen editor): first K1–K4 movement after prepareKnobAssignment… binds hardware,
-        then subsequent moves use normal mapping — audio stays on message thread only. */
+    /** Assign Mode (fullscreen editor): first K1-K4 movement after prepareKnobAssignment... binds hardware,
+        then subsequent moves use normal mapping - audio stays on message thread only. */
     if (event.type == HardwareControlType::AbsoluteNormalized && isKnobId(event.id))
     {
         juce::String learnParamId;
@@ -283,7 +283,7 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
 
     if (param == nullptr)
     {
-        Logger::warn("FORGE7: mapping targets missing parameter — slot "
+        Logger::warn("FORGE7: mapping targets missing parameter - slot "
                      + juce::String(mapping.pluginSlotIndex));
         return;
     }
@@ -578,7 +578,7 @@ bool ParameterMappingManager::isAwaitingKnobAssignmentHardwareMove() const noexc
 
 void ParameterMappingManager::armLearnTargetForHardware(const HardwareControlId hardwareId)
 {
-    /** Future: host a modal learn session; tie into `AudioProcessorEditor` param touch — not implemented. */
+    /** Future: host a modal learn session; tie into `AudioProcessorEditor` param touch - not implemented. */
     learnHardwareTarget = hardwareId;
     learnArmed = true;
 }

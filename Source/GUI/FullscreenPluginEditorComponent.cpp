@@ -38,7 +38,7 @@ juce::String mappingLabelForKnob(const juce::Array<ParameterMappingDescriptor>& 
             return m.displayName.isNotEmpty() ? m.displayName : juce::String("Param");
     }
 
-    return juce::String("—");
+    return juce::String("-");
 }
 } // namespace
 
@@ -102,7 +102,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     };
     addAndMakeVisible(assignModeToggle);
 
-    assignHintLabel.setText("Select a parameter, then twist K1–K4 to assign (or use Assign buttons for toggles).",
+    assignHintLabel.setText("Select a parameter, then twist K1-K4 to assign (or use Assign buttons for toggles).",
                             juce::dontSendNotification);
     assignHintLabel.setFont(juce::Font(13.0f));
     assignHintLabel.setColour(juce::Label::textColourId, muted());
@@ -220,7 +220,7 @@ void FullscreenPluginEditorComponent::timerCallback()
         if (juce::isPositiveAndBelow(si, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(si)] != nullptr)
         {
             const auto& sc = *scenes[static_cast<size_t>(si)];
-            line = "Scene " + juce::String(si + 1) + " · " + sc.getSceneName();
+            line = "Scene " + juce::String(si + 1) + " - " + sc.getSceneName();
 
             const auto& vars = sc.getVariations();
             const int vi =
@@ -229,7 +229,7 @@ void FullscreenPluginEditorComponent::timerCallback()
                     : juce::jlimit(0, static_cast<int>(vars.size()) - 1, sc.getActiveChainVariationIndex());
 
             if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
-                line += "   ·   Var: " + vars[static_cast<size_t>(vi)]->getVariationName();
+                line += "   -   Var: " + vars[static_cast<size_t>(vi)]->getVariationName();
         }
 
         sceneVarLabel.setText(line, juce::dontSendNotification);
@@ -356,7 +356,7 @@ void FullscreenPluginEditorComponent::refreshMappingStrip()
         if (auto* chain = appContext.pluginHostManager->getPluginChain())
         {
             const auto info = chain->getSlotInfo(slotIndex);
-            titleLabel.setText("Slot " + juce::String(slotIndex + 1) + " · " + info.slotDisplayName,
+            titleLabel.setText("Slot " + juce::String(slotIndex + 1) + " - " + info.slotDisplayName,
                                juce::dontSendNotification);
         }
 }

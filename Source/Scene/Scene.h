@@ -12,7 +12,7 @@ namespace forge7
 
 /** One scene in the project: tempo, ordered chain variations, and which variation is armed.
 
-    Holds **no** GUI or audio references — safe for headless tests and serialization. */
+    Holds **no** GUI or audio references - safe for headless tests and serialization. */
 class Scene
 {
 public:
@@ -48,7 +48,7 @@ public:
     /** Clamp `activeChainVariationIndex` into `[0, variations.size()-1]` or reset if empty. */
     void clampActiveVariationIndex() noexcept;
 
-    /** Duplicate all variations with fresh IDs — used when duplicating a scene. */
+    /** Duplicate all variations with fresh IDs - used when duplicating a scene. */
     std::unique_ptr<Scene> duplicateWithNewSceneIdentity(const juce::String& duplicatedSceneName) const;
 
 private:

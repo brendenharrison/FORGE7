@@ -8,6 +8,7 @@
 #include "../PluginHost/PluginChain.h"
 #include "CpuMeter.h"
 #include "RackSlotCard.h"
+#include "UiTextAsciiPolicy.h"
 
 namespace forge7
 {
@@ -16,7 +17,7 @@ struct AppContext;
 class PluginBrowserComponent;
 class PluginInspectorComponent;
 
-/** Edit Mode (“Rack”): status bar, dominant horizontal chain, optional collapsible inspector,
+/** Edit Mode ("Rack"): status bar, dominant horizontal chain, optional collapsible inspector,
 
     slot context strip, fullscreen in-app plugin browser. Touch-first ~7". Message thread only. */
 class RackViewComponent final : public juce::Component,
@@ -95,8 +96,8 @@ private:
     std::array<std::unique_ptr<juce::Label>, 9> arrowLabels {};
     std::array<std::unique_ptr<RackSlotCard>, kPluginChainMaxSlots> slotCards {};
 
-    juce::TextButton ctxMoveLeftButton { "\u2190" };
-    juce::TextButton ctxMoveRightButton { "\u2192" };
+    juce::TextButton ctxMoveLeftButton { "<" };
+    juce::TextButton ctxMoveRightButton { ">" };
     juce::ToggleButton ctxBypassToggle { "Bypass" };
     juce::TextButton ctxRemoveButton { "Remove" };
     juce::TextButton ctxReplaceButton { "Replace" };

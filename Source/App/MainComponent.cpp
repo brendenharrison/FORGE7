@@ -206,7 +206,7 @@ void MainComponent::focusPluginInspectorFromDevTools()
 
     juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
                                              "Plugin inspector",
-                                             "Load a plugin in the rack first — no non-empty slots found.",
+                                             "Load a plugin in the rack first - no non-empty slots found.",
                                              "OK");
 }
 

@@ -447,8 +447,8 @@ void SimulatedControlsComponent::timerCallback()
 
 void SimulatedControlsComponent::refreshDebugLabels()
 {
-    juce::String sceneLine = "Scene: —";
-    juce::String varLine = "Variation: —";
+    juce::String sceneLine = "Scene: -";
+    juce::String varLine = "Variation: -";
 
     if (appContext.sceneManager != nullptr)
     {
@@ -458,7 +458,7 @@ void SimulatedControlsComponent::refreshDebugLabels()
         if (juce::isPositiveAndBelow(si, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(si)] != nullptr)
         {
             const auto& sc = *scenes[static_cast<size_t>(si)];
-            sceneLine = "Scene: " + juce::String(si + 1) + " · " + sc.getSceneName();
+            sceneLine = "Scene: " + juce::String(si + 1) + " - " + sc.getSceneName();
 
             const auto& vars = sc.getVariations();
             const int vi =
@@ -519,7 +519,7 @@ void SimulatedControlsComponent::refreshDebugLabels()
 
     lastEventLabel.setText(ev, juce::dontSendNotification);
 
-    juce::String knobsSummary = "K1–K4: ";
+    juce::String knobsSummary = "K1-K4: ";
 
     for (int i = 0; i < 4; ++i)
         knobsSummary += juce::String(knobs[static_cast<size_t>(i)].getValue(), 2)
@@ -531,9 +531,9 @@ void SimulatedControlsComponent::refreshDebugLabels()
         encoderFocusLabel.setText("Encoder focus: " + appContext.encoderNavigator->getFocusDebugSummary(),
                                   juce::dontSendNotification);
     else
-        encoderFocusLabel.setText("Encoder focus: —", juce::dontSendNotification);
+        encoderFocusLabel.setText("Encoder focus: -", juce::dontSendNotification);
 
-    juce::String slotLine = "Selected rack slot: —";
+    juce::String slotLine = "Selected rack slot: -";
 
     if (appContext.mainComponent != nullptr)
         if (auto* rack = appContext.mainComponent->getRackView())
@@ -548,7 +548,7 @@ void SimulatedControlsComponent::refreshDebugLabels()
         uiSurfaceLabel.setText("UI: " + appContext.mainComponent->describeUiSurfaceForDevTools(),
                                juce::dontSendNotification);
     else
-        uiSurfaceLabel.setText("UI: —", juce::dontSendNotification);
+        uiSurfaceLabel.setText("UI: -", juce::dontSendNotification);
 }
 
 } // namespace forge7

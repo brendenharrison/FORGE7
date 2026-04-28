@@ -17,16 +17,16 @@ namespace forge7
 /** Floating window that owns one `AudioProcessorEditor` for a loaded `AudioPluginInstance`.
 
     Threading: **create / show / close only on the JUCE message thread.** Destroying the window deletes
-    the editor UI only — the plugin instance keeps running in the processing graph, so audio is
+    the editor UI only - the plugin instance keeps running in the processing graph, so audio is
     unaffected (same contract as any JUCE host).
 
     Future (not implemented): intercept editor mouse/attachments here or via a transparent overlay to
-    drive `ParameterMappingManager::armLearnTargetForHardware` (“click a knob to map” learn mode).
+    drive `ParameterMappingManager::armLearnTargetForHardware` ("click a knob to map" learn mode).
     That must remain optional and must never block `processBlock`. */
 class PluginEditorHostWindow final : public juce::DocumentWindow
 {
 public:
-    /** Returns nullptr if `hasEditor()` is false or `createEditorIfNeeded()` fails — caller shows a warning. */
+    /** Returns nullptr if `hasEditor()` is false or `createEditorIfNeeded()` fails - caller shows a warning. */
     static std::unique_ptr<PluginEditorHostWindow> tryCreate(juce::AudioPluginInstance& plugin,
                                                              const juce::String& windowTitle,
                                                              std::function<void()> onWindowFullyClosed);

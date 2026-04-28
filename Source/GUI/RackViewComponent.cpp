@@ -133,7 +133,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
     for (auto& a : arrowLabels)
     {
         a = std::make_unique<juce::Label>();
-        a->setText("›", juce::dontSendNotification);
+        a->setText(">", juce::dontSendNotification);
         a->setJustificationType(juce::Justification::centred);
         a->setColour(juce::Label::textColourId, rackMuted());
         a->setFont(juce::Font(28.0f));
@@ -279,7 +279,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
     {
         juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
                                                  "Settings",
-                                                 "App settings — coming soon.",
+                                                 "App settings - coming soon.",
                                                  "OK");
     };
 
@@ -477,7 +477,7 @@ void RackViewComponent::refreshSlotDisplays()
 
     juce::String sceneLine = "Scene";
     juce::String varLine = "Variation";
-    juce::String tempoLine = "— BPM";
+    juce::String tempoLine = "- BPM";
 
     if (appContext.sceneManager != nullptr)
     {
@@ -487,7 +487,7 @@ void RackViewComponent::refreshSlotDisplays()
         if (juce::isPositiveAndBelow(si, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(si)] != nullptr)
         {
             const auto& sc = *scenes[static_cast<size_t>(si)];
-            sceneLine = "Scene " + juce::String(si + 1) + " · " + sc.getSceneName();
+            sceneLine = "Scene " + juce::String(si + 1) + " - " + sc.getSceneName();
 
             const auto& vars = sc.getVariations();
 
@@ -626,7 +626,7 @@ void RackViewComponent::showPluginBrowser()
         {
             const auto info = chain->getSlotInfo(i);
 
-            /** V1: treat “empty” as no loaded plugin; placeholders still occupy the slot. */
+            /** V1: treat "empty" as no loaded plugin; placeholders still occupy the slot. */
             if (info.isEmpty && !info.missingPlugin)
             {
                 emptySlot = i;

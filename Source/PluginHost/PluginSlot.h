@@ -33,7 +33,7 @@ public:
     /** Called when the audio device stops (not from process callback). */
     void releaseResources();
 
-    /** Real-time mono processing: bypass or null processor → pass-through. */
+    /** Real-time mono processing: bypass or null processor -> pass-through. */
     void processMonoBlock(float* monoInOut, int numSamples, juce::MidiBuffer& midiScratch) noexcept;
 
     /** Register placeholder metadata only (no instance). Message thread + chain lock. */
@@ -43,7 +43,7 @@ public:
     void clearSlotContent();
 
     /** Replace slot contents with a loaded instance; applies `prepareToPlay` immediately with the
-        supplied layout. Message thread + chain lock — never from audio callback. */
+        supplied layout. Message thread + chain lock - never from audio callback. */
     void assignHostedPlugin(std::unique_ptr<juce::AudioPluginInstance> instance,
                             const juce::PluginDescription& description,
                             double sampleRate,
@@ -56,7 +56,7 @@ public:
     const juce::String& getSlotName() const noexcept { return slotName; }
     const juce::String& getPluginIdentifier() const noexcept { return pluginIdentifier; }
 
-    /** Full JUCE metadata for persistence (name, format, manufacturer, file path, UID, …). */
+    /** Full JUCE metadata for persistence (name, format, manufacturer, file path, UID, ...). */
     const juce::PluginDescription& getPluginDescription() const noexcept { return cachedPluginDescription; }
 
     const juce::MemoryBlock& getPluginStatePlaceholder() const noexcept { return pluginStatePlaceholder; }

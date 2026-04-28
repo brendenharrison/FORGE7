@@ -30,7 +30,7 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    /** Switches rack vs performance layouts; future hook for hardware “mode” button. */
+    /** Switches rack vs performance layouts; future hook for hardware "mode" button. */
     void setEditMode(bool shouldShowRackEditor);
 
     void openFullscreenPluginEditor(int slotIndex);

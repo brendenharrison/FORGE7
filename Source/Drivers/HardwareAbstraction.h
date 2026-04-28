@@ -12,7 +12,7 @@ class ControlManager;
 
 /** Narrow OS/HAL boundary for LattePanda Mu Linux: GPIO expander, /dev/input, rotary
     encoder quadrature, SPI displays, etc. Implementations live under Drivers/ platform
-    folders later. ControlManager polls or subscribes via this interface — no knowledge
+    folders later. ControlManager polls or subscribes via this interface - no knowledge
     of sysfs paths here.
 
     Keep polling on a non-audio thread; signal ControlManager through thread-safe queues. */

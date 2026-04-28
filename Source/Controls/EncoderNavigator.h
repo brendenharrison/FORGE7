@@ -14,7 +14,7 @@ namespace forge7
 
 struct AppContext;
 
-/** Hardware encoder → focus ring + activate / escape. Touch-agnostic: draws a highlight ring only.
+/** Hardware encoder -> focus ring + activate / escape. Touch-agnostic: draws a highlight ring only.
 
     Typical wiring: screens build `std::vector<EncoderFocusItem>` and call `setRootFocusChain`.
 

@@ -11,7 +11,7 @@ namespace forge7
 
 /** One touch-friendly slot in the horizontal rack (Edit Mode).
 
-    Threading: message thread only — host queries from `PluginChain::getSlotInfo`. */
+    Threading: message thread only - host queries from `PluginChain::getSlotInfo`. */
 class RackSlotCard final : public juce::Component
 {
 public:

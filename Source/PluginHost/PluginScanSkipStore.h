@@ -8,7 +8,7 @@ namespace forge7
 /** Persists VST3 bundles to skip during **in-process** scanning.
 
     Entries store the bundle path and **last modification time** (from the filesystem). A skip applies
-    only while that revision is on disk — if the vendor ships an update (different mod time), the entry
+    only while that revision is on disk - if the vendor ships an update (different mod time), the entry
     is dropped automatically on the next scan so the new build is tried again.
 
     Crash handling: immediately before probing a bundle we write `scan_pending_probe.json`; after a
@@ -22,7 +22,7 @@ public:
     bool load();
     bool save() const;
 
-    /** Drops entries whose bundle is missing or has a newer mod time (plugin updated — retry scan). */
+    /** Drops entries whose bundle is missing or has a newer mod time (plugin updated - retry scan). */
     void pruneStaleEntries();
 
     bool shouldSkipScanning(const juce::String& bundlePath) const;

@@ -15,7 +15,7 @@ class PluginHostManager;
 
 /** Touch-friendly plugin picker for a rack slot: scanned plugins, search, multi-column list.
 
-    Does not open the plugin's editor — only selection for host instantiation. */
+    Does not open the plugin's editor - only selection for host instantiation. */
 class PluginBrowserComponent final : public juce::Component, private juce::ListBoxModel
 {
 public:
@@ -38,7 +38,7 @@ public:
 
     void clearLoadError() noexcept;
 
-    /** Ordered: search, list (rotate moves selection), Add, Cancel — for EncoderNavigator. */
+    /** Ordered: search, list (rotate moves selection), Add, Cancel - for EncoderNavigator. */
     std::vector<EncoderFocusItem> buildEncoderFocusItems();
 
     void ensureDefaultListSelectionForEncoder();

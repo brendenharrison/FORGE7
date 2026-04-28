@@ -9,11 +9,11 @@ class ControlManager;
 
 /** Placeholder for a microcontroller UART / USB-CDC path.
 
-    For the product vocabulary “serial control input”, see `SerialControlInput` (thin facade over this class).
+    For the product vocabulary "serial control input", see `SerialControlInput` (thin facade over this class).
 
     Production flow: a background thread reads framed lines or binary packets from `juce::SerialPort`
     (or platform equivalent), parses into **the same** `HardwareControlEvent` shape, and calls
-    `ControlManager::submitHardwareEvent` — **never** inject raw bytes into GUI.
+    `ControlManager::submitHardwareEvent` - **never** inject raw bytes into GUI.
 
     This TU stays a stub until the wire protocol is defined; keeps compile graph ready. */
 class UsbSerialHardwareBridge
@@ -27,7 +27,7 @@ public:
 
     void closeConnection();
 
-    /** Dev hook: feed one text line (`K1 0.5`, `ENC +1`, …) once protocol is specified. */
+    /** Dev hook: feed one text line (`K1 0.5`, `ENC +1`, ...) once protocol is specified. */
     void injectParsedLineForDevelopment(const juce::String& line);
 
 private:

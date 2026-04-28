@@ -33,7 +33,7 @@ struct AppContext
     /** Full-window encoder focus overlay; optional until MainComponent constructs. */
     EncoderNavigator* encoderNavigator = nullptr;
 
-    /** Root shell — set by `MainComponent` for dev tools / simulated hardware UI. Message thread only. */
+    /** Root shell - set by `MainComponent` for dev tools / simulated hardware UI. Message thread only. */
     MainComponent* mainComponent = nullptr;
 };
 

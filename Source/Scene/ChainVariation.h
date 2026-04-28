@@ -11,7 +11,7 @@ namespace forge7
 /** Matches live `PluginChain` slot count for snapshot storage (no runtime `PluginChain` pointer). */
 constexpr int kChainSnapshotMaxSlots = 8;
 
-/** One slot in a saved chain topology — mirrors what `PluginChain` / `PluginSlot` persist. */
+/** One slot in a saved chain topology - mirrors what `PluginChain` / `PluginSlot` persist. */
 struct ChainSlotSnapshot
 {
     juce::String pluginIdentifier;
@@ -44,9 +44,9 @@ struct ChainSnapshot
     static ChainSnapshot createEmptyFixedLayout();
 };
 
-/** One chain variation within a Scene (A/B/C… routing / preset chains).
+/** One chain variation within a Scene (A/B/C... routing / preset chains).
 
-    Pure domain data — no GUI or `AudioProcessor` pointers. `PluginHostManager` applies this
+    Pure domain data - no GUI or `AudioProcessor` pointers. `PluginHostManager` applies this
     snapshot when the variation becomes active (future wiring). */
 class ChainVariation
 {
@@ -78,7 +78,7 @@ public:
     float getEstimatedCpuLoad01() const noexcept { return estimatedCpuLoad01; }
     void setEstimatedCpuLoad01(float load) noexcept { estimatedCpuLoad01 = load; }
 
-    /** Sum of hosted plugin latencies in samples — placeholder until PDC graph exists. */
+    /** Sum of hosted plugin latencies in samples - placeholder until PDC graph exists. */
     int getTotalLatencySamples() const noexcept { return totalLatencySamples; }
     void setTotalLatencySamples(int samples) noexcept { totalLatencySamples = samples; }
 

@@ -13,7 +13,7 @@ constexpr int kDefaultH = 820;
 } // namespace
 
 DevToolsWindow::DevToolsWindow(AppContext& context)
-    : DocumentWindow("FORGE 7 · Simulated Hardware",
+    : DocumentWindow("FORGE 7 - Simulated Hardware",
                      juce::Desktop::getInstance().getDefaultLookAndFeel().findColour(juce::ResizableWindow::backgroundColourId),
                      DocumentWindow::closeButton,
                      false)

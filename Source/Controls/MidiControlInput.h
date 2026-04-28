@@ -11,16 +11,16 @@ namespace forge7
 
 class ControlManager;
 
-/** MIDI → `HardwareControlEvent` using `DevelopmentMidiMapping` (editable defaults).
+/** MIDI -> `HardwareControlEvent` using `DevelopmentMidiMapping` (editable defaults).
 
     **Threading**
-    - `handleIncomingMidiMessage` runs on the JUCE MIDI thread — **never** touch plugin parameters here.
+    - `handleIncomingMidiMessage` runs on the JUCE MIDI thread - **never** touch plugin parameters here.
       Only call `ControlManager::submitHardwareEvent`, which marshals work to the message thread.
-    - `openDevice…` / `setDevelopmentMapping` — call from the **message thread** (GUI / startup).
+    - `openDevice...` / `setDevelopmentMapping` - call from the **message thread** (GUI / startup).
 
     **Device selection**
-    - `getAvailableInputDevices()` — enumerate inputs for UI.
-    - `openDeviceAtIndex` / `openDeviceWithIdentifier` — select active port; closes the previous input. */
+    - `getAvailableInputDevices()` - enumerate inputs for UI.
+    - `openDeviceAtIndex` / `openDeviceWithIdentifier` - select active port; closes the previous input. */
 class MidiControlInput final : public juce::MidiInputCallback
 {
 public:

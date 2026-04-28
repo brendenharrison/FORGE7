@@ -17,7 +17,7 @@ UsbSerialHardwareBridge::~UsbSerialHardwareBridge() = default;
 bool UsbSerialHardwareBridge::openConnection(const juce::String& devicePathHint)
 {
     juce::ignoreUnused(devicePathHint);
-    Logger::info("FORGE7: UsbSerialHardwareBridge::openConnection — stub (no wire protocol yet)");
+    Logger::info("FORGE7: UsbSerialHardwareBridge::openConnection - stub (no wire protocol yet)");
     return false;
 }
 
@@ -27,7 +27,7 @@ void UsbSerialHardwareBridge::injectParsedLineForDevelopment(const juce::String&
 {
     juce::ignoreUnused(line);
     juce::ignoreUnused(controlManager);
-    Logger::info("FORGE7: UsbSerialHardwareBridge::injectParsedLineForDevelopment — stub");
+    Logger::info("FORGE7: UsbSerialHardwareBridge::injectParsedLineForDevelopment - stub");
 }
 
 } // namespace forge7

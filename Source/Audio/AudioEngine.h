@@ -11,7 +11,7 @@ namespace forge7
 class PluginHostManager;
 
 /** Owns JUCE AudioDeviceManager and drives the real-time guitar path:
-    mono in → input gain → PluginChain (mono) → output gain → stereo duplicate.
+    mono in -> input gain -> PluginChain (mono) -> output gain -> stereo duplicate.
 
     Threading contract:
     - **Audio / real-time callback** (`audioDeviceIOCallbackWithContext`, helpers it calls):
@@ -68,7 +68,7 @@ public:
     /** JUCE-reported approximate CPU load of the audio callback [0, 1]. Safe to read from GUI/timer only. */
     double getApproximateCpuUsage() const noexcept { return deviceManager.getCpuUsage(); }
 
-    // AudioIODeviceCallback  (audio thread — see implementation comments)
+    // AudioIODeviceCallback  (audio thread - see implementation comments)
     void audioDeviceIOCallbackWithContext(const float* const* inputChannelData,
                                           int numInputChannels,
                                           float* const* outputChannelData,
@@ -83,7 +83,7 @@ private:
     PluginHostManager& pluginHostManager;
     juce::AudioDeviceManager deviceManager;
 
-    /** Pre-sized in `audioDeviceAboutToStart` only — holds mono samples between stages. */
+    /** Pre-sized in `audioDeviceAboutToStart` only - holds mono samples between stages. */
     std::vector<float> monoWorkBuffer;
     int monoWorkBufferCapacity = 0;
 

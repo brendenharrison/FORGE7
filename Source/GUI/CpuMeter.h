@@ -9,7 +9,7 @@ class AudioEngine;
 
 /** Displays approximate CPU usage derived from measurements taken outside the RT callback
     (e.g. time delta around process dispatch). Reads atomics fed by AudioEngine / host on
-    a timer — never queries plugins directly from paint(). */
+    a timer - never queries plugins directly from paint(). */
 class CpuMeter final : public juce::Component,
                        private juce::Timer
 {
@@ -23,7 +23,7 @@ private:
     void timerCallback() override;
 
     AudioEngine* audioEngine = nullptr;
-    juce::String cpuLabel { "CPU —%" };
+    juce::String cpuLabel { "CPU -%" };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(CpuMeter)
 };

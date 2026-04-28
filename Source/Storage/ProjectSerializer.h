@@ -11,7 +11,7 @@ class PluginHostManager;
 
 /** Persists FORGE 7 projects as UTF-8 JSON (`juce::JSON`, `juce::var`, `juce::DynamicObject`).
 
-    Threading: **message thread only** — never call from `audioDeviceIOCallback`.
+    Threading: **message thread only** - never call from `audioDeviceIOCallback`.
 
     Versioning:
     - `projectFileVersion` field gates parsing. **When bumping for breaking changes**, add a new
@@ -20,11 +20,11 @@ class PluginHostManager;
     - Prefer additive JSON keys when possible so older loaders can still ignore unknown fields.
     - Keep `kCurrentProjectFileVersion` in sync with the writer.
 
-    Save flow (optional live capture): if `captureLiveFromHost` is non-null, the **active scene’s
-    active chain variation** is copied from `PluginHostManager`’s live `PluginChain` into the domain
-    model before serializing (processor state via `getStateInformation` → Base64).
+    Save flow (optional live capture): if `captureLiveFromHost` is non-null, the **active scene's
+    active chain variation** is copied from `PluginHostManager`'s live `PluginChain` into the domain
+    model before serializing (processor state via `getStateInformation` -> Base64).
 
-    Load flow (optional hydrate): if `hydrateIntoHost` is non-null, the **active scene’s active
+    Load flow (optional hydrate): if `hydrateIntoHost` is non-null, the **active scene's active
     variation** is instantiated into the live chain; missing plugins become placeholder + missing
     flag without failing the whole project. */
 class ProjectSerializer

@@ -18,7 +18,7 @@ class PluginHostManager;
 /** Central hub: all physical inputs normalize into `HardwareControlEvent` and enter here.
 
     Transports (MIDI, USB serial stub, keyboard dev harness, future GPIO) call **`submitHardwareEvent`**
-    only — **never** bypass this type for feature code so GUI and audio routing stay agnostic.
+    only - **never** bypass this type for feature code so GUI and audio routing stay agnostic.
 
     Threading:
     - **submitHardwareEvent** may be called from MIDI callbacks, serial threads, or message thread.
@@ -34,7 +34,7 @@ public:
     public:
         virtual ~Listener() = default;
 
-        /** Knob movement after normalization (id is always Knob1…Knob4). */
+        /** Knob movement after normalization (id is always Knob1...Knob4). */
         virtual void parameterControlChanged(HardwareControlId id, float normalizedValue) {}
 
         /** Assign buttons (pressed or released). */
@@ -43,7 +43,7 @@ public:
         virtual void chainVariationPreviousPressed() {}
         virtual void chainVariationNextPressed() {}
 
-        /** Encoder: rotation delta, short press, long press — unified stream for navigation UX. */
+        /** Encoder: rotation delta, short press, long press - unified stream for navigation UX. */
         virtual void encoderNavigationEvent(const HardwareControlEvent& event) {}
     };
 
@@ -58,7 +58,7 @@ public:
     void addListener(Listener* listener);
     void removeListener(Listener* listener);
 
-    /** Entry point for every transport — **the** normalization boundary. */
+    /** Entry point for every transport - **the** normalization boundary. */
     void submitHardwareEvent(HardwareControlEvent event);
 
     /** Optional built-in routing: chain prev/next invoke scene variation stepping with crossfade.

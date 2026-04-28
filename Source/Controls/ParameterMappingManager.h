@@ -14,7 +14,7 @@ namespace forge7
 class PluginHostManager;
 class SceneManager;
 
-/** Maintains hardware → plugin parameter bindings scoped by scene + chain variation.
+/** Maintains hardware -> plugin parameter bindings scoped by scene + chain variation.
 
     All parameter writes use `AudioProcessorParameter::{beginChangeGesture,setValueNotifyingHost,endChangeGesture}`
     from the **message thread** only (driven by `ControlManager::submitHardwareEvent`). */
@@ -35,7 +35,7 @@ public:
 
     void removeMapping(const ParameterMappingDescriptor& keyMatch);
 
-    /** All stored rows (copy) — message thread. */
+    /** All stored rows (copy) - message thread. */
     juce::Array<ParameterMappingDescriptor> getAllMappings() const;
 
     /** Merge `fields` with the active scene + variation ids, then upsert. */
@@ -53,10 +53,10 @@ public:
                                                    bool toggleForButton = false,
                                                    bool momentaryForButton = true);
 
-    /** Enumerate automatable parameters for the audible chain’s slot — message thread only. */
+    /** Enumerate automatable parameters for the audible chain's slot - message thread only. */
     juce::Array<AutomatableParameterSummary> getAutomatableParametersForSlot(int pluginSlotIndex) const;
 
-    /** Fullscreen Assign Mode: next K1–K4 hardware move assigns that knob to this parameter (scene/variation scoped). */
+    /** Fullscreen Assign Mode: next K1-K4 hardware move assigns that knob to this parameter (scene/variation scoped). */
     void prepareKnobAssignmentToNextHardwareMove(int pluginSlotIndex,
                                                  const juce::String& pluginParameterId,
                                                  int pluginParameterIndexFallback,

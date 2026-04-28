@@ -49,7 +49,7 @@ private:
     /** Top-level frame; owns the root MainComponent via setContentOwned. */
     std::unique_ptr<juce::DocumentWindow> mainWindow;
 
-    /** Desktop dev-only simulated hardware panel — see `FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW` + AppConfig. */
+    /** Desktop dev-only simulated hardware panel - see `FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW` + AppConfig. */
     std::unique_ptr<DevToolsWindow> devToolsWindow;
 };
 

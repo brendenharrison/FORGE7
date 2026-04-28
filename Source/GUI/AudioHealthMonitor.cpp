@@ -39,7 +39,7 @@ void AudioHealthMonitor::timerCallback()
     juce::String line = "RT callbacks (est. / ~250 ms): " + juce::String(static_cast<juce::int64>(delta));
 
     if (delta == 0 && total > 0)
-        line += " — possible stall";
+        line += " - possible stall";
 
     statusLabel.setText(line, juce::dontSendNotification);
 }

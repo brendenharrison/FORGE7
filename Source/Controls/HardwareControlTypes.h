@@ -5,7 +5,7 @@
 namespace forge7
 {
 
-/** Origin of a normalized control event — **not** required for routing logic; GUI/audio should
+/** Origin of a normalized control event - **not** required for routing logic; GUI/audio should
     ignore this and handle only `HardwareControlId` + `HardwareControlType`. Useful for diagnostics
     and device-specific calibration (MIDI learn, serial protocol version). */
 enum class HardwareControlSource : uint8_t
@@ -13,13 +13,13 @@ enum class HardwareControlSource : uint8_t
     Unknown = 0,
     Midi,
     SimulatedKeyboard,
-    /** macOS/desktop SimulatedControlsComponent / dev panel — diagnostics only. */
+    /** macOS/desktop SimulatedControlsComponent / dev panel - diagnostics only. */
     SimulatedGui,
     UsbSerial,
     FutureGpio,
 };
 
-/** Stable logical IDs for FORGE 7 fixed hardware (see product layout: K1–K4, assigns, chain, encoder). */
+/** Stable logical IDs for FORGE 7 fixed hardware (see product layout: K1-K4, assigns, chain, encoder). */
 enum class HardwareControlId : uint32_t
 {
     Knob1,
@@ -35,10 +35,10 @@ enum class HardwareControlId : uint32_t
     EncoderLongPress,
 };
 
-/** Shape of the payload — interpretation of `HardwareControlEvent::value` depends on this + `id`. */
+/** Shape of the payload - interpretation of `HardwareControlEvent::value` depends on this + `id`. */
 enum class HardwareControlType : uint8_t
 {
-    /** Continuous 0…1 (knobs). `id` must be `Knob1`…`Knob4`. */
+    /** Continuous 0...1 (knobs). `id` must be `Knob1`...`Knob4`. */
     AbsoluteNormalized,
 
     /** Relative movement; used with `HardwareControlId::EncoderRotate`. `value` = signed detents
@@ -60,7 +60,7 @@ struct HardwareControlEvent
     HardwareControlType type { HardwareControlType::AbsoluteNormalized };
     HardwareControlSource source { HardwareControlSource::Unknown };
 
-    /** Meaning depends on `type` / `id`: normalized 0…1, button N/A, or signed delta for encoder. */
+    /** Meaning depends on `type` / `id`: normalized 0...1, button N/A, or signed delta for encoder. */
     float value { 0.0f };
 
     /** Optional monotonic stamp (e.g. `Time::getMillisecondCounterHiRes()`); 0 if unknown. */

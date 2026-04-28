@@ -11,9 +11,9 @@ namespace forge7
 
 struct AppContext;
 
-/** Development-only simulated floor hardware (K1–K4, assigns, chain, encoder, shortcuts).
+/** Development-only simulated floor hardware (K1-K4, assigns, chain, encoder, shortcuts).
 
-    All control actions call `ControlManager::submitHardwareEvent` — never touches plugins directly.
+    All control actions call `ControlManager::submitHardwareEvent` - never touches plugins directly.
 
     Threading: message thread only. */
 class SimulatedControlsComponent final : public juce::Component,

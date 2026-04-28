@@ -37,7 +37,7 @@ void AudioEngine::initialiseAudioDevice()
 
     const juce::String initError = deviceManager.initialise(1, 2, nullptr, true, juce::String(), nullptr);
     if (initError.isNotEmpty())
-        Logger::error("AudioEngine: AudioDeviceManager::initialise failed — " + initError);
+        Logger::error("AudioEngine: AudioDeviceManager::initialise failed - " + initError);
 
     juce::AudioDeviceManager::AudioDeviceSetup setup;
     deviceManager.getAudioDeviceSetup(setup);
@@ -66,16 +66,16 @@ void AudioEngine::initialiseAudioDevice()
     }
 
     if (setupError.isNotEmpty())
-        Logger::error("AudioEngine: audio device setup failed — " + setupError);
+        Logger::error("AudioEngine: audio device setup failed - " + setupError);
     else
-        Logger::info("AudioEngine: audio device setup succeeded — sample rate "
+        Logger::info("AudioEngine: audio device setup succeeded - sample rate "
                      + juce::String(setup.sampleRate, 1) + " Hz, buffer "
                      + juce::String(setup.bufferSize) + " frames");
 
     deviceManager.addAudioCallback(this);
 
     if (auto* device = deviceManager.getCurrentAudioDevice())
-        Logger::info("AudioEngine: active device — " + device->getName());
+        Logger::info("AudioEngine: active device - " + device->getName());
     else
         Logger::error("AudioEngine: no audio device is active after setup");
 }
@@ -115,7 +115,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
                                                    int numSamples,
                                                    const juce::AudioIODeviceCallbackContext& context)
 {
-    // Real-time / audio callback — allocation-free and lock-free. Gain/bypass/meters use relaxed atomics;
+    // Real-time / audio callback - allocation-free and lock-free. Gain/bypass/meters use relaxed atomics;
     // monoWorkBuffer is resized only in audioDeviceAboutToStart (never here).
     juce::ignoreUnused(context);
 
@@ -129,7 +129,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 #if JUCE_DEBUG
         static std::atomic<int> once { 0 };
         if (once.fetch_add(1, std::memory_order_relaxed) == 0)
-            DBG("AudioEngine: callback block larger than prepared mono buffer — dropping audio");
+            DBG("AudioEngine: callback block larger than prepared mono buffer - dropping audio");
 #endif
         return;
     }
@@ -188,10 +188,10 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
 {
-    // Invoked before streaming (often audio/device thread): resize scratch here only — never in processBlock.
+    // Invoked before streaming (often audio/device thread): resize scratch here only - never in processBlock.
     if (device == nullptr)
     {
-        juce::MessageManager::callAsync([] { Logger::error("AudioEngine: audioDeviceAboutToStart — device is null"); });
+        juce::MessageManager::callAsync([] { Logger::error("AudioEngine: audioDeviceAboutToStart - device is null"); });
         monoWorkBuffer.clear();
         monoWorkBufferCapacity = 0;
         return;
@@ -211,7 +211,7 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
     const int cap = monoWorkBufferCapacity;
     juce::MessageManager::callAsync([sr, block, cap]()
                                     {
-                                        Logger::info("AudioEngine: stream starting — SR " + juce::String(sr, 1) + " Hz, block "
+                                        Logger::info("AudioEngine: stream starting - SR " + juce::String(sr, 1) + " Hz, block "
                                                      + juce::String(block) + " samples, mono work capacity " + juce::String(cap));
                                     });
 }

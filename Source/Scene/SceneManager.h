@@ -11,13 +11,13 @@ namespace forge7
 class Scene;
 class PluginHostManager;
 
-/** Owns the project's **Scenes** → **ChainVariations** tree (V1: no Setlists/Songs).
+/** Owns the project's **Scenes** -> **ChainVariations** tree (V1: no Setlists/Songs).
 
-    Pure model + indices — **no GUI**. After changing the active variation index, call
+    Pure model + indices - **no GUI**. After changing the active variation index, call
     `PluginHostManager::commitChainVariationCrossfade` (or the `*WithCrossfade` helpers below) so
     the dual-rack host can crossfade without blocking the audio thread.
 
-    Hardware mapping: **chain prev/next** → `nextChainVariationWithCrossfade()` etc. */
+    Hardware mapping: **chain prev/next** -> `nextChainVariationWithCrossfade()` etc. */
 class SceneManager
 {
 public:
@@ -32,7 +32,7 @@ public:
     Scene* getActiveScene() noexcept;
     const Scene* getActiveScene() const noexcept;
 
-    /** Current scene’s selected variation index; `0` if no active scene. */
+    /** Current scene's selected variation index; `0` if no active scene. */
     int getActiveChainVariationIndex() const noexcept;
 
     // --- Scenes ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ public:
 
     bool renameScene(int sceneIndex, const juce::String& newName);
 
-    /** Returns new scene’s `sceneId`. */
+    /** Returns new scene's `sceneId`. */
     juce::String duplicateScene(int sceneIndex);
 
     bool selectScene(int sceneIndex);
