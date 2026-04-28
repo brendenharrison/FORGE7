@@ -184,7 +184,7 @@ void PluginBrowserComponent::clearLoadError() noexcept
 
 bool PluginBrowserComponent::isVst3Description(const juce::PluginDescription& d) noexcept
 {
-    return d.pluginFormatName.containsIgnoreCase("VST3");
+    return d.pluginFormatName.containsIgnoreCase("VST3") || d.fileOrIdentifier.endsWithIgnoreCase(".vst3");
 }
 
 void PluginBrowserComponent::rebuildList()
@@ -202,6 +202,18 @@ void PluginBrowserComponent::rebuildList()
             allDescriptions.add(d);
     }
 
+    if (raw.size() > 0 && allDescriptions.isEmpty())
+    {
+        Logger::warn("FORGE7 Plugin Browser: KnownPluginList has " + juce::String(raw.size())
+                     + " entries but none matched the VST3 browser filter — sample rows:");
+
+        for (int i = 0; i < juce::jmin(8, raw.size()); ++i)
+        {
+            const auto& d = raw.getReference(i);
+            Logger::warn("  format=\"" + d.pluginFormatName + "\" fileOrIdentifier=\"" + d.fileOrIdentifier + "\"");
+        }
+    }
+
     filterAndRefresh();
 }
 
@@ -211,8 +223,8 @@ void PluginBrowserComponent::updateStatusForEmptyVst3List()
         return;
 
     scanStatusLabel.setText(
-        "No VST3 plugins found. Confirm plugins exist in /Library/Audio/Plug-Ins/VST3 or "
-        "~/Library/Audio/Plug-Ins/VST3.",
+        "No VST3 plugins found. Checked /Library/Audio/Plug-Ins/VST3 and ~/Library/Audio/Plug-Ins/VST3. "
+        "See logs for folder contents.",
         juce::dontSendNotification);
 }
 
@@ -224,21 +236,14 @@ void PluginBrowserComponent::onScanPluginsClicked()
     scanInProgress = true;
     scanPluginsButton.setEnabled(false);
     scanStatusLabel.setColour(juce::Label::textColourId, browserText());
-    scanStatusLabel.setText("Scanning plugins…", juce::dontSendNotification);
+    scanStatusLabel.setText("Scanning VST3 plugins…", juce::dontSendNotification);
 
-    Logger::info("FORGE7: Plugin Browser — Scan Plugins clicked; registering VST3 folders and starting async scan");
+    Logger::info(
+        "FORGE7: Plugin Browser — Scan Plugins clicked; addStandardPlatformScanDirectories + scanVST3PluginsAsync");
 
     pluginHostManager.addStandardPlatformScanDirectories();
 
-    pluginHostManager.addPluginScanDirectory(juce::File("/Library/Audio/Plug-Ins/VST3"));
-    Logger::info("FORGE7: Plugin Browser — ensured scan folder — /Library/Audio/Plug-Ins/VST3");
-
-    const auto userVst3 =
-        juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile("Library/Audio/Plug-Ins/VST3");
-    pluginHostManager.addPluginScanDirectory(userVst3);
-    Logger::info("FORGE7: Plugin Browser — ensured scan folder — " + userVst3.getFullPathName());
-
-    pluginHostManager.scanAllPluginsAsync([this](const int added) { onScanFinished(added); });
+    pluginHostManager.scanVST3PluginsAsync([this](const int added) { onScanFinished(added); });
 }
 
 void PluginBrowserComponent::onScanFinished(const int numAdded)
@@ -247,7 +252,7 @@ void PluginBrowserComponent::onScanFinished(const int numAdded)
     scanPluginsButton.setEnabled(true);
     hasCompletedPluginScan = true;
 
-    const int totalKnown = pluginHostManager.getKnownPluginDescriptionCount();
+    const int totalKnown = pluginHostManager.getKnownPluginCount();
 
     rebuildList();
 
@@ -255,16 +260,10 @@ void PluginBrowserComponent::onScanFinished(const int numAdded)
     {
         updateStatusForEmptyVst3List();
     }
-    else if (numAdded > 0)
-    {
-        scanStatusLabel.setText("Scan complete: added " + juce::String(numAdded) + " plugins — total in list "
-                                    + juce::String(totalKnown),
-                                juce::dontSendNotification);
-    }
     else
     {
-        scanStatusLabel.setText("Scan complete: found " + juce::String(allDescriptions.size()) + " VST3 plugins (list "
-                                    + juce::String(totalKnown) + " descriptions total)",
+        scanStatusLabel.setText("Scan complete: added " + juce::String(numAdded) + " plugins, total "
+                                    + juce::String(totalKnown) + " plugins",
                                 juce::dontSendNotification);
     }
 

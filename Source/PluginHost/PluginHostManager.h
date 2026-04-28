@@ -52,13 +52,20 @@ public:
     /** Typical OS folders (`~/.vst3`, system/user VST3 dirs on macOS, `/usr/lib/vst3` on Linux, etc.). */
     void addStandardPlatformScanDirectories();
 
-    /** Blocking scan — **never** invoke from audio thread (disk / plugin probing). Returns added count this pass.
-
-        Scans **VST3 format only** (no Audio Units / Components scan path in this loop). */
+    /** Blocking scan — **never** invoke from audio thread. Delegates to `scanVST3PluginsBlocking()`. */
     int scanAllPluginsBlocking();
+
+    /** Blocking VST3-only scan using registered VST3 `AudioPluginFormat`. Returns descriptions added this pass. */
+    int scanVST3PluginsBlocking();
+
+    /** Worker thread runs `scanVST3PluginsBlocking`; completion on message thread with added count. */
+    void scanVST3PluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
 
     /** Worker thread runs scan; completion invoked on message thread (`numDescriptionsAdded`). */
     void scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
+
+    /** Same as `getKnownPluginDescriptionCount()` — total entries in `KnownPluginList` under lock. */
+    int getKnownPluginCount() const;
 
     /** Thread-safe count of entries in `KnownPluginList` (may include cached non-VST3 from older sessions). */
     int getKnownPluginDescriptionCount() const;

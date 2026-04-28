@@ -47,4 +47,6 @@ target_compile_definitions(Forge7 PRIVATE
     JUCE_USE_CURL=0
     JUCE_APPLICATION_NAME_STRING="FORGE 7"
     JUCE_APPLICATION_VERSION_STRING="${PROJECT_VERSION}"
+    # Required for VST3 format registration in AudioPluginFormatManager::addDefaultFormats().
+    JUCE_PLUGINHOST_VST3=1
 )

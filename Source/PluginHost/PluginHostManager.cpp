@@ -3,6 +3,8 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include <algorithm>
+
 #include "PluginChain.h"
 #include "PluginSlot.h"
 
@@ -28,11 +30,99 @@ juce::PluginDescription pluginDescriptionFromSnapshot(const ChainSlotSnapshot& s
 
     return pd;
 }
+
+void logRegisteredAudioPluginFormats(juce::AudioPluginFormatManager& fm)
+{
+    Logger::info("FORGE7 plugin formats registered:");
+
+    bool sawVst3 = false;
+
+    for (auto* fmt : fm.getFormats())
+    {
+        if (fmt == nullptr)
+            continue;
+
+        const juce::String name = fmt->getName();
+        Logger::info("  - " + name);
+
+        if (name.containsIgnoreCase("VST3"))
+            sawVst3 = true;
+    }
+
+    if (!sawVst3)
+        Logger::error(
+            "FORGE7 ERROR: VST3 format is not registered. Check JUCE plugin host build flags (e.g. "
+            "JUCE_PLUGINHOST_VST3=1).");
+}
+
+/** Lists immediate children whose name ends with .vst3 (bundles). */
+void logVst3BundlesInFolder(const juce::File& dir)
+{
+    const juce::String path = dir.getFullPathName();
+
+    if (!dir.exists())
+    {
+        Logger::warn("FORGE7 VST3 folder: " + path + " — path does not exist");
+        return;
+    }
+
+    if (!dir.isDirectory())
+    {
+        Logger::warn("FORGE7 VST3 folder: " + path + " — exists but is not a directory");
+        return;
+    }
+
+    juce::Array<juce::File> bundles;
+
+    {
+        juce::Array<juce::File> children;
+        dir.findChildFiles(children, juce::File::findFilesAndDirectories, false);
+
+        for (const auto& f : children)
+        {
+            if (f.getFileName().endsWithIgnoreCase(".vst3"))
+                bundles.add(f);
+        }
+    }
+
+    std::sort(bundles.begin(),
+              bundles.end(),
+              [](const juce::File& a, const juce::File& b)
+              {
+                  return a.getFileName().compareIgnoreCase(b.getFileName()) < 0;
+              });
+
+    Logger::info("FORGE7 VST3 folder: " + path + " contains " + juce::String(bundles.size())
+                 + " .vst3 bundle(s)");
+
+    const int nShow = juce::jmin(20, bundles.size());
+
+    for (int i = 0; i < nShow; ++i)
+        Logger::info("  - " + bundles.getReference(i).getFileName());
+
+    if (bundles.size() > 20)
+        Logger::info("  ... (" + juce::String(static_cast<int>(bundles.size()) - 20) + " more)");
+}
+
+juce::AudioPluginFormat* findVst3Format(juce::AudioPluginFormatManager& fm)
+{
+    for (auto* fmt : fm.getFormats())
+    {
+        if (fmt != nullptr && fmt->getName().containsIgnoreCase("VST3"))
+            return fmt;
+    }
+
+    return nullptr;
+}
+
 } // namespace
 
 PluginHostManager::PluginHostManager()
 {
     formatManager.addDefaultFormats();
+
+    logRegisteredAudioPluginFormats(formatManager);
+
     chains[0] = std::make_unique<PluginChain>();
     chains[1] = std::make_unique<PluginChain>();
 }
@@ -56,18 +146,55 @@ juce::Array<juce::PluginDescription> PluginHostManager::getAvailablePluginDescri
 
 void PluginHostManager::addPluginScanDirectory(const juce::File& directory)
 {
-    const juce::ScopedLock lock(scanFoldersLock);
+    const juce::String path = directory.getFullPathName();
+    const bool exists = directory.exists();
+    const bool isDir = directory.isDirectory();
 
-    if (! directory.isDirectory())
-        return;
+    juce::String reason = "ok";
+    bool added = false;
 
-    auto norm = directory.getFullPathName();
+    {
+        const juce::ScopedLock lock(scanFoldersLock);
 
-    for (auto& existing : userScanDirectories)
-        if (existing.getFullPathName().equalsIgnoreCase(norm))
-            return;
+        if (!isDir)
+        {
+            reason = exists ? "not_a_directory" : "missing";
+        }
+        else
+        {
+            const auto norm = directory.getFullPathName();
 
-    userScanDirectories.add(directory);
+            bool duplicate = false;
+
+            for (auto& existing : userScanDirectories)
+            {
+                if (existing.getFullPathName().equalsIgnoreCase(norm))
+                {
+                    duplicate = true;
+                    break;
+                }
+            }
+
+            if (duplicate)
+            {
+                reason = "duplicate";
+            }
+            else
+            {
+                userScanDirectories.add(directory);
+                added = true;
+            }
+        }
+    }
+
+    juce::String line =
+        "FORGE7 ScanDir: " + path + " exists=" + juce::String(exists ? "yes" : "no") + " isDir="
+        + juce::String(isDir ? "yes" : "no") + " added=" + juce::String(added ? "yes" : "no");
+
+    if (!added && reason != "ok")
+        line += " reason=" + reason;
+
+    Logger::info(line);
 }
 
 void PluginHostManager::removePluginScanDirectory(const juce::File& directory)
@@ -93,34 +220,38 @@ juce::Array<juce::File> PluginHostManager::getPluginScanDirectories() const
 
 void PluginHostManager::addStandardPlatformScanDirectories()
 {
-#if JUCE_LINUX || JUCE_MAC || JUCE_WINDOWS
-    {
-        const auto dotVst3 =
-            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".vst3");
-        addPluginScanDirectory(dotVst3);
-        Logger::info("FORGE7: plugin scan folder considered — " + dotVst3.getFullPathName());
-    }
-#endif
-
 #if JUCE_MAC
     {
         const juce::File sysVst3("/Library/Audio/Plug-Ins/VST3");
         addPluginScanDirectory(sysVst3);
-        Logger::info("FORGE7: plugin scan folder considered — " + sysVst3.getFullPathName());
     }
 
     {
-        const auto userVst3 =
-            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile("Library/Audio/Plug-Ins/VST3");
+        const juce::File home = juce::File::getSpecialLocation(juce::File::userHomeDirectory);
+        const juce::File userVst3 =
+            home.getChildFile("Library").getChildFile("Audio").getChildFile("Plug-Ins").getChildFile("VST3");
         addPluginScanDirectory(userVst3);
-        Logger::info("FORGE7: plugin scan folder considered — " + userVst3.getFullPathName());
     }
 
-#elif JUCE_LINUX
+    {
+        const juce::File dotVst3 =
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".vst3");
+        addPluginScanDirectory(dotVst3);
+    }
+
+#elif JUCE_LINUX || JUCE_WINDOWS
+    {
+        const auto dotVst3 =
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".vst3");
+        addPluginScanDirectory(dotVst3);
+    }
+
+#endif
+
+#if JUCE_LINUX
     {
         const juce::File libVst3("/usr/lib/vst3");
         addPluginScanDirectory(libVst3);
-        Logger::info("FORGE7: plugin scan folder considered — " + libVst3.getFullPathName());
     }
 
 #elif JUCE_WINDOWS
@@ -128,15 +259,25 @@ void PluginHostManager::addStandardPlatformScanDirectories()
         auto pf = juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory);
         const auto commonVst3 = pf.getChildFile("Common Files").getChildFile("VST3");
         addPluginScanDirectory(commonVst3);
-        Logger::info("FORGE7: plugin scan folder considered — " + commonVst3.getFullPathName());
     }
 
 #endif
 }
 
-int PluginHostManager::scanAllPluginsBlocking()
+int PluginHostManager::scanVST3PluginsBlocking()
 {
-    Logger::info("FORGE7: plugin scan starting (blocking worker) — VST3 formats only");
+    Logger::info("FORGE7: VST3 scan starting (blocking worker)");
+
+    auto* vst3Format = findVst3Format(formatManager);
+
+    if (vst3Format == nullptr)
+    {
+        Logger::error(
+            "FORGE7 ERROR: VST3 format is not registered — cannot scan. Enable JUCE_PLUGINHOST_VST3 or equivalent.");
+        return 0;
+    }
+
+    Logger::info("FORGE7: using VST3 scanner format — \"" + vst3Format->getName() + "\"");
 
     const juce::ScopedLock plist(pluginListLock);
     const juce::ScopedLock folders(scanFoldersLock);
@@ -147,82 +288,85 @@ int PluginHostManager::scanAllPluginsBlocking()
 
     for (auto& dir : userScanDirectories)
     {
+        logVst3BundlesInFolder(dir);
+
         if (dir.isDirectory())
-        {
             searchPaths.add(dir);
-            Logger::info("FORGE7: plugin scan search path — " + dir.getFullPathName());
-        }
         else
-        {
-            Logger::warn("FORGE7: plugin scan path missing or not a directory — " + dir.getFullPathName());
-        }
+            Logger::warn("FORGE7: skipping scanner path (not a directory) — " + dir.getFullPathName());
     }
 
-    for (auto* format : formatManager.getFormats())
+    Logger::info("FORGE7: PluginDirectoryScanner — VST3 only; num paths: " + juce::String(searchPaths.getNumPaths())
+                 + "; " + searchPaths.toString());
+
+    juce::PluginDirectoryScanner scanner(knownPluginList,
+                                         *vst3Format,
+                                         searchPaths,
+                                         true,
+                                         juce::File(),
+                                         false);
+
+    juce::String nameBeingScanned;
+
+    while (scanner.scanNextFile(true, nameBeingScanned))
     {
-        if (format == nullptr)
-            continue;
+        juce::ignoreUnused(nameBeingScanned);
 
-        const juce::String formatName = format->getName();
-
-        if (!formatName.containsIgnoreCase("VST3"))
-            continue;
-
-        Logger::info("FORGE7: scanning format — " + formatName);
-
-        juce::PluginDirectoryScanner scanner(knownPluginList,
-                                             *format,
-                                             searchPaths,
-                                             true,
-                                             juce::File(),
-                                             false);
-
-        juce::String nameBeingScanned;
-        while (scanner.scanNextFile(true, nameBeingScanned))
-        {
-            juce::ignoreUnused(nameBeingScanned);
-
-            if (shutdownFlag.load(std::memory_order_relaxed))
-                break;
-        }
+        if (shutdownFlag.load(std::memory_order_relaxed))
+            break;
     }
 
     const size_t countAfter = knownPluginList.getTypes().size();
     const int added = static_cast<int>(countAfter - countBefore);
 
-    Logger::info("FORGE7: plugin scan finished — added this pass: " + juce::String(added)
-                 + ", total descriptions in list: " + juce::String(static_cast<int>(countAfter)));
+    Logger::info("FORGE7: VST3 scan finished — added this pass: " + juce::String(added)
+                 + ", knownPluginList total: " + juce::String(static_cast<int>(countAfter)));
 
     return added;
 }
 
-void PluginHostManager::scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
+int PluginHostManager::scanAllPluginsBlocking()
+{
+    return scanVST3PluginsBlocking();
+}
+
+void PluginHostManager::scanVST3PluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
 {
     auto callback = std::move(onFinished);
 
-    Logger::info("FORGE7: plugin scan scheduled — async worker thread");
+    Logger::info("FORGE7: VST3 scan scheduled — async worker thread");
 
     juce::Thread::launch([this, cb = std::move(callback)]() mutable
                          {
-                             Logger::info("FORGE7: plugin scan worker started");
+                             Logger::info("FORGE7: VST3 scan worker started");
 
-                             const int added = scanAllPluginsBlocking();
+                             const int added = scanVST3PluginsBlocking();
 
                              if (cb != nullptr && juce::MessageManager::getInstanceWithoutCreating() != nullptr)
                                  juce::MessageManager::callAsync([cb = std::move(cb), added]() mutable
                                                                  {
                                                                      Logger::info(
-                                                                         "FORGE7: plugin scan UI callback — added "
+                                                                         "FORGE7: VST3 scan UI callback — added "
                                                                          + juce::String(added));
 
                                                                      cb(added);
                                                                  });
                              else if (cb != nullptr)
                              {
-                                 Logger::warn("FORGE7: plugin scan finished but MessageManager unavailable — scan UI "
-                                              "callback skipped");
+                                 Logger::warn(
+                                     "FORGE7: VST3 scan finished but MessageManager unavailable — UI callback skipped");
                              }
                          });
+}
+
+void PluginHostManager::scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
+{
+    scanVST3PluginsAsync(std::move(onFinished));
+}
+
+int PluginHostManager::getKnownPluginCount() const
+{
+    return getKnownPluginDescriptionCount();
 }
 
 int PluginHostManager::getKnownPluginDescriptionCount() const
