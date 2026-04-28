@@ -33,6 +33,9 @@ public:
         preferred buffer 64 (fallback 128). Logs success/failure via Logger. Safe to call once at startup. */
     void initialiseAudioDevice();
 
+    /** Message-thread-only: restore device state from config (if present), else fall back to defaults. */
+    void initialiseAudioDeviceFromConfig(const juce::String& savedDeviceStateXml);
+
     /** Message-thread-only: removes callback and closes the audio device (called from destructor). */
     void shutdownAudio();
 

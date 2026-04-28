@@ -29,48 +29,74 @@ AudioEngine::~AudioEngine()
 
 void AudioEngine::initialiseAudioDevice()
 {
+    initialiseAudioDeviceFromConfig({});
+}
+
+void AudioEngine::initialiseAudioDeviceFromConfig(const juce::String& savedDeviceStateXml)
+{
     // Message thread: device negotiation, logging, and callback registration.
-    Logger::info("AudioEngine: initialising AudioDeviceManager (mono in, stereo out @ 48 kHz, buffer " + juce::String(kPreferredBufferSize)
-                 + " / fallback " + juce::String(kFallbackBufferSize) + ")");
+    Logger::info("AudioEngine: initialising AudioDeviceManager (mono in, stereo out @ 48 kHz, buffer "
+                 + juce::String(kPreferredBufferSize) + " / fallback " + juce::String(kFallbackBufferSize) + ")");
 
     deviceManager.removeAudioCallback(this);
 
-    const juce::String initError = deviceManager.initialise(1, 2, nullptr, true, juce::String(), nullptr);
-    if (initError.isNotEmpty())
-        Logger::error("AudioEngine: AudioDeviceManager::initialise failed - " + initError);
-
-    juce::AudioDeviceManager::AudioDeviceSetup setup;
-    deviceManager.getAudioDeviceSetup(setup);
-
-    setup.sampleRate = kTargetSampleRate;
-    setup.bufferSize = kPreferredBufferSize;
-
-    juce::BigInteger inputChannels;
-    inputChannels.setBit(0);
-
-    juce::BigInteger outputChannels;
-    outputChannels.setBit(0);
-    outputChannels.setBit(1);
-
-    setup.inputChannels = inputChannels;
-    setup.outputChannels = outputChannels;
-
-    juce::String setupError = deviceManager.setAudioDeviceSetup(setup, true);
-
-    if (setupError.isNotEmpty())
+    if (savedDeviceStateXml.isNotEmpty())
     {
-        Logger::warn("AudioEngine: primary device setup failed (" + setupError + "); retrying buffer size " + juce::String(kFallbackBufferSize));
-
-        setup.bufferSize = kFallbackBufferSize;
-        setupError = deviceManager.setAudioDeviceSetup(setup, true);
+        std::unique_ptr<juce::XmlElement> xml(juce::parseXML(savedDeviceStateXml));
+        if (xml != nullptr)
+        {
+            Logger::info("AudioEngine: attempting restore of saved audio device state XML");
+            const juce::String err = deviceManager.initialise(8, 8, xml.get(), true, juce::String(), nullptr);
+            if (err.isNotEmpty())
+                Logger::warn("AudioEngine: restore from saved audio state failed - " + err);
+        }
+        else
+        {
+            Logger::warn("AudioEngine: saved audio device state XML was invalid; falling back to defaults");
+        }
     }
 
-    if (setupError.isNotEmpty())
-        Logger::error("AudioEngine: audio device setup failed - " + setupError);
-    else
-        Logger::info("AudioEngine: audio device setup succeeded - sample rate "
-                     + juce::String(setup.sampleRate, 1) + " Hz, buffer "
-                     + juce::String(setup.bufferSize) + " frames");
+    // If no device is active after restore attempt, fall back to defaults.
+    if (deviceManager.getCurrentAudioDevice() == nullptr)
+    {
+        const juce::String initError = deviceManager.initialise(1, 2, nullptr, true, juce::String(), nullptr);
+        if (initError.isNotEmpty())
+            Logger::error("AudioEngine: AudioDeviceManager::initialise failed - " + initError);
+
+        juce::AudioDeviceManager::AudioDeviceSetup setup;
+        deviceManager.getAudioDeviceSetup(setup);
+
+        setup.sampleRate = kTargetSampleRate;
+        setup.bufferSize = kPreferredBufferSize;
+
+        juce::BigInteger inputChannels;
+        inputChannels.setBit(0);
+
+        juce::BigInteger outputChannels;
+        outputChannels.setBit(0);
+        outputChannels.setBit(1);
+
+        setup.inputChannels = inputChannels;
+        setup.outputChannels = outputChannels;
+
+        juce::String setupError = deviceManager.setAudioDeviceSetup(setup, true);
+
+        if (setupError.isNotEmpty())
+        {
+            Logger::warn("AudioEngine: primary device setup failed (" + setupError + "); retrying buffer size "
+                         + juce::String(kFallbackBufferSize));
+
+            setup.bufferSize = kFallbackBufferSize;
+            setupError = deviceManager.setAudioDeviceSetup(setup, true);
+        }
+
+        if (setupError.isNotEmpty())
+            Logger::error("AudioEngine: audio device setup failed - " + setupError);
+        else
+            Logger::info("AudioEngine: audio device setup succeeded - sample rate "
+                         + juce::String(setup.sampleRate, 1) + " Hz, buffer "
+                         + juce::String(setup.bufferSize) + " frames");
+    }
 
     deviceManager.addAudioCallback(this);
 

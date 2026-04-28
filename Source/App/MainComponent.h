@@ -15,6 +15,7 @@ class RackViewComponent;
 class KeyboardHardwareSimulator;
 class FullscreenPluginEditorComponent;
 class SimulatedControlsComponent;
+class SettingsComponent;
 
 /** Root GUI shell for the standalone app. Switches between Performance Mode (hands-free,
     touch-friendly) and Edit Mode (rack builder). Owns EncoderNavigator for the large
@@ -47,6 +48,10 @@ public:
 
     juce::String describeUiSurfaceForDevTools() const;
 
+    void openSettings();
+    void closeSettings();
+    bool isSettingsOpen() const noexcept { return settingsComponent != nullptr; }
+
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     /** In-app fallback for simulated hardware (always visible inside the main window). */
     void toggleSimulatedControlsPanel();
@@ -64,6 +69,8 @@ private:
     std::unique_ptr<RackViewComponent> rackView;
     std::unique_ptr<KeyboardHardwareSimulator> keyboardHardwareSimulator;
     std::unique_ptr<FullscreenPluginEditorComponent> fullscreenPluginEditor;
+    std::unique_ptr<SettingsComponent> settingsComponent;
+    bool settingsReturnToEditMode = false;
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     class SimHwDrawer final : public juce::Component

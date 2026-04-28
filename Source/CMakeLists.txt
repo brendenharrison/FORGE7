@@ -39,6 +39,7 @@ set(FORGE7_SOURCES
     GUI/PluginBrowserComponent.cpp
     GUI/PluginInspectorComponent.cpp
     GUI/PluginEditorHostWindow.cpp
+    GUI/SettingsComponent.cpp
     GUI/AudioHealthMonitor.cpp
     GUI/CpuMeter.cpp
     GUI/LevelMeter.cpp

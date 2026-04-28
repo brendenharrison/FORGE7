@@ -196,12 +196,10 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
             appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
     };
 
-    settingsButton.onClick = []()
+    settingsButton.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Settings",
-                                                 "Global settings - coming soon.",
-                                                 "OK");
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->openSettings();
     };
 
     addAndMakeVisible(rackEditButton);

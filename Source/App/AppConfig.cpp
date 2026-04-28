@@ -26,8 +26,14 @@ void AppConfig::seedDefaults()
     o->setProperty("projectFileVersion", 1);
 
     o->setProperty("audioDeviceName", juce::var());
+    o->setProperty("audioDeviceType", juce::var());
     o->setProperty("sampleRate", 48000.0);
     o->setProperty("bufferSize", 64);
+    o->setProperty("audioInputChannelsMask", 0);
+    o->setProperty("audioOutputChannelsMask", 0);
+    o->setProperty("audioInputDeviceName", juce::var());
+    o->setProperty("audioOutputDeviceName", juce::var());
+    o->setProperty("audioDeviceStateXml", juce::var());
 
     juce::Array<juce::var> scanDirs;
     o->setProperty("pluginScanDirectories", juce::var(scanDirs));
@@ -100,6 +106,24 @@ bool AppConfig::saveToFile() const
         return false;
 
     return f.replaceWithText(json);
+}
+
+juce::String AppConfig::getAudioDeviceStateXml() const
+{
+    if (auto* o = settings.getDynamicObject())
+    {
+        const juce::var v = o->getProperty("audioDeviceStateXml");
+        if (v.isString())
+            return v.toString();
+    }
+
+    return {};
+}
+
+void AppConfig::setAudioDeviceStateXml(const juce::String& xml)
+{
+    if (auto* o = settings.getDynamicObject())
+        o->setProperty("audioDeviceStateXml", xml);
 }
 
 } // namespace forge7

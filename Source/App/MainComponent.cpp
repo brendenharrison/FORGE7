@@ -6,6 +6,7 @@
 #include "../GUI/FullscreenPluginEditorComponent.h"
 #include "../GUI/PerformanceViewComponent.h"
 #include "../GUI/RackViewComponent.h"
+#include "../GUI/SettingsComponent.h"
 #include "../GUI/SimulatedControlsComponent.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
@@ -37,6 +38,12 @@ MainComponent::MainComponent(AppContext& context)
                                           if (fullscreenPluginEditor != nullptr)
                                           {
                                               closeFullscreenPluginEditor();
+                                              return;
+                                          }
+
+                                          if (settingsComponent != nullptr)
+                                          {
+                                              closeSettings();
                                               return;
                                           }
 
@@ -121,6 +128,15 @@ void MainComponent::resized()
         return;
     }
 
+    if (settingsComponent != nullptr && settingsComponent->isShowing())
+    {
+        settingsComponent->setBounds(bounds);
+        settingsComponent->toFront(false);
+        encoderNavigator.setBounds(bounds);
+        encoderNavigator.toFront(false);
+        return;
+    }
+
     if (performanceView != nullptr)
         performanceView->setBounds(bounds);
     if (rackView != nullptr)
@@ -202,6 +218,32 @@ void MainComponent::hideSimulatedControlsPanel()
     Logger::info("FORGE7 SimHW: hiding in-app drawer");
 }
 #endif
+
+void MainComponent::openSettings()
+{
+    if (settingsComponent != nullptr)
+        return;
+
+    settingsReturnToEditMode = editMode;
+
+    settingsComponent = std::make_unique<SettingsComponent>(appContext, [this]() { closeSettings(); });
+    addAndMakeVisible(*settingsComponent);
+    settingsComponent->toFront(true);
+    encoderNavigator.toFront(false);
+    resized();
+}
+
+void MainComponent::closeSettings()
+{
+    if (settingsComponent == nullptr)
+        return;
+
+    removeChildComponent(settingsComponent.get());
+    settingsComponent.reset();
+
+    setEditMode(settingsReturnToEditMode);
+    resized();
+}
 
 void MainComponent::setEditMode(const bool shouldShowRackEditor)
 {

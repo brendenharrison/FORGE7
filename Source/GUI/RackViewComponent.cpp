@@ -277,12 +277,10 @@ RackViewComponent::RackViewComponent(AppContext& context)
         refreshSlotDisplays();
     };
 
-    settingsButton.onClick = []()
+    settingsButton.onClick = [this]()
     {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Settings",
-                                                 "App settings - coming soon.",
-                                                 "OK");
+        if (auto* main = findParentComponentOfClass<MainComponent>())
+            main->openSettings();
     };
 
     styleLargeTextButton(settingsButton);

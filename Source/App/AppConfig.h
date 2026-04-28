@@ -28,6 +28,10 @@ public:
     /** Dev-only floating simulated hardware panel (default true for desktop iteration). */
     bool getShowSimulatedControls() const noexcept;
 
+    /** Audio device persistence (JUCE AudioDeviceManager state XML serialized to string). */
+    juce::String getAudioDeviceStateXml() const;
+    void setAudioDeviceStateXml(const juce::String& xml);
+
 private:
     juce::var settings;
 

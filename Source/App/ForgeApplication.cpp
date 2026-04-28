@@ -109,11 +109,15 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     if (appConfig->loadOrCreateDefaults())
         Logger::info("FORGE7: config - " + AppConfig::getDefaultConfigFile().getFullPathName());
 
+    appContext.appConfig = appConfig.get();
+
     pluginHostManager = std::make_unique<PluginHostManager>();
     sceneManager = std::make_unique<SceneManager>();
     parameterMappingManager = std::make_unique<ParameterMappingManager>(*sceneManager, *pluginHostManager);
     audioEngine = std::make_unique<AudioEngine>(*pluginHostManager);
-    audioEngine->initialiseAudioDevice();
+    audioEngine->initialiseAudioDeviceFromConfig(appConfig != nullptr ? appConfig->getAudioDeviceStateXml() : juce::String());
+    Logger::info("FORGE7 AudioIO: device state xml len="
+                 + juce::String(appConfig != nullptr ? appConfig->getAudioDeviceStateXml().length() : 0));
 
     controlManager = std::make_unique<ControlManager>(*parameterMappingManager);
     projectSerializer = std::make_unique<ProjectSerializer>(*sceneManager,
@@ -129,7 +133,7 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
         controlManager->attachSceneNavigation(sceneManager.get(), pluginHostManager.get());
     appContext.projectSerializer = projectSerializer.get();
     appContext.parameterMappingManager = parameterMappingManager.get();
-    appContext.appConfig = appConfig.get();
+    // appContext.appConfig already set before AudioEngine init above.
 
     mainWindow = std::make_unique<ForgeMainWindow>("FORGE 7", std::make_unique<MainComponent>(appContext));
 
