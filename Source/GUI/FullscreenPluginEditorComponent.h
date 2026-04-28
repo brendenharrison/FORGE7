@@ -7,6 +7,8 @@
 
 #include "../Controls/ParameterMappingDescriptor.h"
 
+#include "PluginEditorCanvas.h"
+
 namespace juce
 {
 class AudioProcessorEditor;
@@ -25,7 +27,8 @@ class CpuMeter;
     Assignment Mode: pick a parameter from the list, then twist K1–K4 — `ParameterMappingManager`
     binds on first knob delta (see `prepareKnobAssignmentToNextHardwareMove`).
 
-    TODO: direct click-to-map inside plugin GUIs when bridged editors expose reliable hit testing. */
+    Plugin UI is hosted inside `PluginEditorCanvas` so oversized VST editors scale/pan within the
+    central area without overlapping FORGE chrome. */
 class FullscreenPluginEditorComponent final : public juce::Component,
                                                private juce::Timer,
                                                private juce::ListBoxModel
@@ -73,8 +76,14 @@ private:
     juce::ToggleButton assignModeToggle { "Assign" };
     std::unique_ptr<CpuMeter> cpuMeter;
 
-    juce::Viewport editorViewport;
+    juce::TextButton viewFitHeight { "Fit H" };
+    juce::TextButton viewFitWidth { "Fit W" };
+    juce::TextButton viewFitAll { "Fit All" };
+    juce::TextButton viewActual100 { "100%" };
+
+    /** Owned first so destruction clears canvas → releases hosted editor before unique_ptr resets. */
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;
+    PluginEditorCanvas pluginEditorCanvas;
 
     juce::Label assignHintLabel;
     juce::ListBox parameterList { {}, this };

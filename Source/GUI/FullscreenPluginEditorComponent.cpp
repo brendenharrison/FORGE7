@@ -53,6 +53,9 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
     setOpaque(true);
 
+    // Add first so the hosted VST/editor view stays behind all FORGE chrome (labels, mapping strip).
+    addAndMakeVisible(pluginEditorCanvas);
+
     backButton.onClick = [this]()
     {
         if (onClose != nullptr)
@@ -129,7 +132,37 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
         addAndMakeVisible(l);
     }
 
-    addAndMakeVisible(editorViewport);
+    viewFitHeight.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
+    viewFitHeight.setColour(juce::TextButton::textColourOffId, text());
+    viewFitHeight.onClick = [this]()
+    {
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitHeight);
+    };
+    addAndMakeVisible(viewFitHeight);
+
+    viewFitWidth.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
+    viewFitWidth.setColour(juce::TextButton::textColourOffId, text());
+    viewFitWidth.onClick = [this]()
+    {
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitWidth);
+    };
+    addAndMakeVisible(viewFitWidth);
+
+    viewFitAll.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
+    viewFitAll.setColour(juce::TextButton::textColourOffId, text());
+    viewFitAll.onClick = [this]()
+    {
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitAll);
+    };
+    addAndMakeVisible(viewFitAll);
+
+    viewActual100.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
+    viewActual100.setColour(juce::TextButton::textColourOffId, text());
+    viewActual100.onClick = [this]()
+    {
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::Actual100);
+    };
+    addAndMakeVisible(viewActual100);
 
     juce::AudioPluginInstance* instance = nullptr;
 
@@ -148,7 +181,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     }
 
     if (embeddedEditor != nullptr)
-        editorViewport.setViewedComponent(embeddedEditor.get(), false);
+        pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
 
     rebuildParameterListModel();
 
@@ -164,7 +197,7 @@ FullscreenPluginEditorComponent::~FullscreenPluginEditorComponent()
     if (appContext.parameterMappingManager != nullptr)
         appContext.parameterMappingManager->cancelKnobAssignmentLearn();
 
-    editorViewport.setViewedComponent(nullptr, false);
+    pluginEditorCanvas.clearHostedEditor();
     embeddedEditor.reset();
 }
 
@@ -226,6 +259,23 @@ void FullscreenPluginEditorComponent::resized()
 
     area.removeFromTop(8);
 
+    {
+        auto viewRow = area.removeFromTop(34);
+        const int gap = 6;
+        const int nBtns = 4;
+        const int btnW = juce::jmax(56, (viewRow.getWidth() - gap * (nBtns - 1)) / nBtns);
+
+        viewFitHeight.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        viewFitWidth.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        viewFitAll.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        viewActual100.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+    }
+
+    area.removeFromTop(6);
+
     auto bottom = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
 
     auto strip = bottom.removeFromBottom(72).reduced(0, 4);
@@ -246,11 +296,7 @@ void FullscreenPluginEditorComponent::resized()
         parameterList.setBounds(bottom);
     }
 
-    editorViewport.setBounds(area);
-
-    if (embeddedEditor != nullptr)
-        embeddedEditor->setSize(juce::jmax(80, editorViewport.getWidth()),
-                                juce::jmax(80, editorViewport.getHeight()));
+    pluginEditorCanvas.setBounds(area);
 }
 
 void FullscreenPluginEditorComponent::rebuildParameterListModel()
@@ -389,6 +435,22 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
 
     items.push_back({ &backButton, [this]() { backButton.triggerClick(); }, {} });
     items.push_back({ &assignModeToggle, [this]() { assignModeToggle.triggerClick(); }, {} });
+
+    items.push_back({ &viewFitHeight, [this]() { viewFitHeight.triggerClick(); }, {} });
+    items.push_back({ &viewFitWidth, [this]() { viewFitWidth.triggerClick(); }, {} });
+    items.push_back({ &viewFitAll, [this]() { viewFitAll.triggerClick(); }, {} });
+    items.push_back({ &viewActual100, [this]() { viewActual100.triggerClick(); }, {} });
+
+    /** Encoder rotate pans the plugin canvas when zoomed; encoder press toggles horizontal vs vertical pan axis. */
+    items.push_back({ &pluginEditorCanvas,
+                      [this]()
+                      {
+                          pluginEditorCanvas.toggleEncoderPanAxis();
+                      },
+                      [this](const int d)
+                      {
+                          pluginEditorCanvas.panWithEncoderDetents(d);
+                      } });
 
     if (assignModeToggle.getToggleState())
     {

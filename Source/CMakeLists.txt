@@ -33,6 +33,7 @@ set(FORGE7_SOURCES
     GUI/RackViewComponent.cpp
     GUI/SimulatedControlsComponent.cpp
     GUI/FullscreenPluginEditorComponent.cpp
+    GUI/PluginEditorCanvas.cpp
     GUI/RackSlotCard.cpp
     GUI/PerformanceViewComponent.cpp
     GUI/PluginBrowserComponent.cpp
