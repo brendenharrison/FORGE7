@@ -49,14 +49,19 @@ public:
     void clearPluginScanDirectories();
     juce::Array<juce::File> getPluginScanDirectories() const;
 
-    /** Typical OS folders (`~/.vst3`, `/usr/lib/vst3` on Linux, etc.). */
+    /** Typical OS folders (`~/.vst3`, system/user VST3 dirs on macOS, `/usr/lib/vst3` on Linux, etc.). */
     void addStandardPlatformScanDirectories();
 
-    /** Blocking scan — **never** invoke from audio thread (disk / plugin probing). Returns added count this pass. */
+    /** Blocking scan — **never** invoke from audio thread (disk / plugin probing). Returns added count this pass.
+
+        Scans **VST3 format only** (no Audio Units / Components scan path in this loop). */
     int scanAllPluginsBlocking();
 
     /** Worker thread runs scan; completion invoked on message thread (`numDescriptionsAdded`). */
     void scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
+
+    /** Thread-safe count of entries in `KnownPluginList` (may include cached non-VST3 from older sessions). */
+    int getKnownPluginDescriptionCount() const;
 
     /** Persist / restore KnownPluginList cache — message thread only. */
     bool saveKnownPluginsToFile(const juce::File& xmlFile) const;

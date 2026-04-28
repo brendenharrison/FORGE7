@@ -3,11 +3,14 @@
 #include <vector>
 
 #include "../PluginHost/PluginHostManager.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
 namespace
 {
+constexpr int kTitleRowHeight = 44;
+constexpr int kScanStatusHeight = 40;
 constexpr int kSearchHeight = 48;
 constexpr int kCategoryStubHeight = 44;
 constexpr int kHeaderRowHeight = 30;
@@ -35,6 +38,13 @@ void styleSearchBox(juce::TextEditor& ed)
     ed.setIndents(14, (kSearchHeight - 18) / 2 + 1);
 }
 
+void styleScanButton(juce::TextButton& b)
+{
+    b.setColour(juce::TextButton::buttonColourId, browserAccent().withAlpha(0.38f));
+    b.setColour(juce::TextButton::textColourOffId, browserText());
+    b.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+}
+
 void splitColumns(const int innerWidth, int& wName, int& wMfg, int& wFmt, int& wCompat)
 {
     wName = juce::roundToInt(static_cast<float>(innerWidth) * kFracName);
@@ -60,6 +70,17 @@ PluginBrowserComponent::PluginBrowserComponent(PluginHostManager& hostManager)
     titleLabel.setFont(juce::Font(22.0f));
     titleLabel.setColour(juce::Label::textColourId, browserText());
     addAndMakeVisible(titleLabel);
+
+    scanPluginsButton.onClick = [this]() { onScanPluginsClicked(); };
+    styleScanButton(scanPluginsButton);
+    addAndMakeVisible(scanPluginsButton);
+
+    scanStatusLabel.setText("No scan run yet", juce::dontSendNotification);
+    scanStatusLabel.setJustificationType(juce::Justification::centredLeft);
+    scanStatusLabel.setFont(juce::Font(14.0f));
+    scanStatusLabel.setColour(juce::Label::textColourId, browserMuted());
+    scanStatusLabel.setMinimumHorizontalScale(0.72f);
+    addAndMakeVisible(scanStatusLabel);
 
     filterEditor.setTextToShowWhenEmpty("Search plugins…", browserMuted());
     filterEditor.setColour(juce::TextEditor::backgroundColourId, browserBg().brighter(0.08f));
@@ -161,11 +182,103 @@ void PluginBrowserComponent::clearLoadError() noexcept
     loadErrorLabel.setVisible(false);
 }
 
+bool PluginBrowserComponent::isVst3Description(const juce::PluginDescription& d) noexcept
+{
+    return d.pluginFormatName.containsIgnoreCase("VST3");
+}
+
 void PluginBrowserComponent::rebuildList()
 {
     clearLoadError();
-    allDescriptions = pluginHostManager.getAvailablePluginDescriptions();
+
+    const auto raw = pluginHostManager.getAvailablePluginDescriptions();
+    allDescriptions.clear();
+
+    for (int i = 0; i < raw.size(); ++i)
+    {
+        const auto& d = raw.getReference(i);
+
+        if (isVst3Description(d))
+            allDescriptions.add(d);
+    }
+
     filterAndRefresh();
+}
+
+void PluginBrowserComponent::updateStatusForEmptyVst3List()
+{
+    if (!hasCompletedPluginScan || !allDescriptions.isEmpty())
+        return;
+
+    scanStatusLabel.setText(
+        "No VST3 plugins found. Confirm plugins exist in /Library/Audio/Plug-Ins/VST3 or "
+        "~/Library/Audio/Plug-Ins/VST3.",
+        juce::dontSendNotification);
+}
+
+void PluginBrowserComponent::onScanPluginsClicked()
+{
+    if (scanInProgress)
+        return;
+
+    scanInProgress = true;
+    scanPluginsButton.setEnabled(false);
+    scanStatusLabel.setColour(juce::Label::textColourId, browserText());
+    scanStatusLabel.setText("Scanning plugins…", juce::dontSendNotification);
+
+    Logger::info("FORGE7: Plugin Browser — Scan Plugins clicked; registering VST3 folders and starting async scan");
+
+    pluginHostManager.addStandardPlatformScanDirectories();
+
+    pluginHostManager.addPluginScanDirectory(juce::File("/Library/Audio/Plug-Ins/VST3"));
+    Logger::info("FORGE7: Plugin Browser — ensured scan folder — /Library/Audio/Plug-Ins/VST3");
+
+    const auto userVst3 =
+        juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile("Library/Audio/Plug-Ins/VST3");
+    pluginHostManager.addPluginScanDirectory(userVst3);
+    Logger::info("FORGE7: Plugin Browser — ensured scan folder — " + userVst3.getFullPathName());
+
+    pluginHostManager.scanAllPluginsAsync([this](const int added) { onScanFinished(added); });
+}
+
+void PluginBrowserComponent::onScanFinished(const int numAdded)
+{
+    scanInProgress = false;
+    scanPluginsButton.setEnabled(true);
+    hasCompletedPluginScan = true;
+
+    const int totalKnown = pluginHostManager.getKnownPluginDescriptionCount();
+
+    rebuildList();
+
+    if (allDescriptions.isEmpty())
+    {
+        updateStatusForEmptyVst3List();
+    }
+    else if (numAdded > 0)
+    {
+        scanStatusLabel.setText("Scan complete: added " + juce::String(numAdded) + " plugins — total in list "
+                                    + juce::String(totalKnown),
+                                juce::dontSendNotification);
+    }
+    else
+    {
+        scanStatusLabel.setText("Scan complete: found " + juce::String(allDescriptions.size()) + " VST3 plugins (list "
+                                    + juce::String(totalKnown) + " descriptions total)",
+                                juce::dontSendNotification);
+    }
+
+    if (filteredRows.size() > 0)
+    {
+        listBox.selectRow(0);
+        listBox.scrollToEnsureRowIsOnscreen(0);
+    }
+
+    syncAddButtonEnabled();
+    listBox.repaint();
+
+    Logger::info("FORGE7: Plugin Browser — scan UI refresh complete; VST3 rows shown: "
+                 + juce::String(allDescriptions.size()));
 }
 
 void PluginBrowserComponent::filterAndRefresh()
@@ -233,8 +346,15 @@ void PluginBrowserComponent::resized()
 {
     auto r = getLocalBounds().reduced(10, 12);
 
-    titleLabel.setBounds(r.removeFromTop(34));
-    r.removeFromTop(10);
+    auto titleRow = r.removeFromTop(kTitleRowHeight);
+    scanPluginsButton.setBounds(titleRow.removeFromRight(148).reduced(0, 4));
+    titleRow.removeFromRight(8);
+    titleLabel.setBounds(titleRow);
+
+    r.removeFromTop(6);
+
+    scanStatusLabel.setBounds(r.removeFromTop(kScanStatusHeight));
+    r.removeFromTop(8);
 
     filterEditor.setBounds(r.removeFromTop(kSearchHeight));
     r.removeFromTop(10);
@@ -402,6 +522,14 @@ void PluginBrowserComponent::encoderNudgeListSelection(const int deltaSteps)
 std::vector<EncoderFocusItem> PluginBrowserComponent::buildEncoderFocusItems()
 {
     std::vector<EncoderFocusItem> items;
+
+    items.push_back({ &scanPluginsButton,
+                      [this]()
+                      {
+                          if (scanPluginsButton.isEnabled())
+                              scanPluginsButton.triggerClick();
+                      },
+                      {} });
 
     items.push_back({ &filterEditor,
                       [this]()

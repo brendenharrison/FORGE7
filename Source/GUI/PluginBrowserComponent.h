@@ -60,10 +60,16 @@ private:
     void confirmRow(int row);
     void syncAddButtonEnabled();
     void layoutColumnHeaders(juce::Rectangle<int> headerArea);
+    void onScanPluginsClicked();
+    void onScanFinished(int numAdded);
+    void updateStatusForEmptyVst3List();
+    static bool isVst3Description(const juce::PluginDescription& d) noexcept;
 
     PluginHostManager& pluginHostManager;
 
     juce::Label titleLabel;
+    juce::TextButton scanPluginsButton { "Scan Plugins" };
+    juce::Label scanStatusLabel;
     juce::TextEditor filterEditor;
 
     /** Non-interactive placeholder for future category filtering. */
@@ -85,6 +91,8 @@ private:
     juce::Array<int> filteredRows;
 
     bool loadErrorVisible { false };
+    bool scanInProgress { false };
+    bool hasCompletedPluginScan { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginBrowserComponent)
 };

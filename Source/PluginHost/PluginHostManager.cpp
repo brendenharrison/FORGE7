@@ -94,36 +94,81 @@ juce::Array<juce::File> PluginHostManager::getPluginScanDirectories() const
 void PluginHostManager::addStandardPlatformScanDirectories()
 {
 #if JUCE_LINUX || JUCE_MAC || JUCE_WINDOWS
-    addPluginScanDirectory(juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".vst3"));
+    {
+        const auto dotVst3 =
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile(".vst3");
+        addPluginScanDirectory(dotVst3);
+        Logger::info("FORGE7: plugin scan folder considered — " + dotVst3.getFullPathName());
+    }
 #endif
 
-#if JUCE_LINUX
-    addPluginScanDirectory(juce::File("/usr/lib/vst3"));
-#elif JUCE_MAC
-    addPluginScanDirectory(juce::File("/Library/Audio/Plug-Ins/VST3"));
+#if JUCE_MAC
+    {
+        const juce::File sysVst3("/Library/Audio/Plug-Ins/VST3");
+        addPluginScanDirectory(sysVst3);
+        Logger::info("FORGE7: plugin scan folder considered — " + sysVst3.getFullPathName());
+    }
+
+    {
+        const auto userVst3 =
+            juce::File::getSpecialLocation(juce::File::userHomeDirectory).getChildFile("Library/Audio/Plug-Ins/VST3");
+        addPluginScanDirectory(userVst3);
+        Logger::info("FORGE7: plugin scan folder considered — " + userVst3.getFullPathName());
+    }
+
+#elif JUCE_LINUX
+    {
+        const juce::File libVst3("/usr/lib/vst3");
+        addPluginScanDirectory(libVst3);
+        Logger::info("FORGE7: plugin scan folder considered — " + libVst3.getFullPathName());
+    }
+
 #elif JUCE_WINDOWS
-    auto pf = juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory);
-    addPluginScanDirectory(pf.getChildFile("Common Files").getChildFile("VST3"));
+    {
+        auto pf = juce::File::getSpecialLocation(juce::File::globalApplicationsDirectory);
+        const auto commonVst3 = pf.getChildFile("Common Files").getChildFile("VST3");
+        addPluginScanDirectory(commonVst3);
+        Logger::info("FORGE7: plugin scan folder considered — " + commonVst3.getFullPathName());
+    }
+
 #endif
 }
 
 int PluginHostManager::scanAllPluginsBlocking()
 {
+    Logger::info("FORGE7: plugin scan starting (blocking worker) — VST3 formats only");
+
     const juce::ScopedLock plist(pluginListLock);
     const juce::ScopedLock folders(scanFoldersLock);
+
+    const size_t countBefore = knownPluginList.getTypes().size();
 
     juce::FileSearchPath searchPaths;
 
     for (auto& dir : userScanDirectories)
+    {
         if (dir.isDirectory())
+        {
             searchPaths.add(dir);
-
-    const size_t countBefore = knownPluginList.getTypes().size();
+            Logger::info("FORGE7: plugin scan search path — " + dir.getFullPathName());
+        }
+        else
+        {
+            Logger::warn("FORGE7: plugin scan path missing or not a directory — " + dir.getFullPathName());
+        }
+    }
 
     for (auto* format : formatManager.getFormats())
     {
         if (format == nullptr)
             continue;
+
+        const juce::String formatName = format->getName();
+
+        if (!formatName.containsIgnoreCase("VST3"))
+            continue;
+
+        Logger::info("FORGE7: scanning format — " + formatName);
 
         juce::PluginDirectoryScanner scanner(knownPluginList,
                                              *format,
@@ -143,27 +188,47 @@ int PluginHostManager::scanAllPluginsBlocking()
     }
 
     const size_t countAfter = knownPluginList.getTypes().size();
+    const int added = static_cast<int>(countAfter - countBefore);
 
-    Logger::info("FORGE7: plugin scan finished — descriptions: " + juce::String(static_cast<int>(countAfter))
-                 + ", added this pass: " + juce::String(static_cast<int>(countAfter - countBefore)));
+    Logger::info("FORGE7: plugin scan finished — added this pass: " + juce::String(added)
+                 + ", total descriptions in list: " + juce::String(static_cast<int>(countAfter)));
 
-    return static_cast<int>(countAfter - countBefore);
+    return added;
 }
 
 void PluginHostManager::scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
 {
     auto callback = std::move(onFinished);
 
+    Logger::info("FORGE7: plugin scan scheduled — async worker thread");
+
     juce::Thread::launch([this, cb = std::move(callback)]() mutable
                          {
+                             Logger::info("FORGE7: plugin scan worker started");
+
                              const int added = scanAllPluginsBlocking();
 
                              if (cb != nullptr && juce::MessageManager::getInstanceWithoutCreating() != nullptr)
                                  juce::MessageManager::callAsync([cb = std::move(cb), added]() mutable
                                                                  {
+                                                                     Logger::info(
+                                                                         "FORGE7: plugin scan UI callback — added "
+                                                                         + juce::String(added));
+
                                                                      cb(added);
                                                                  });
+                             else if (cb != nullptr)
+                             {
+                                 Logger::warn("FORGE7: plugin scan finished but MessageManager unavailable — scan UI "
+                                              "callback skipped");
+                             }
                          });
+}
+
+int PluginHostManager::getKnownPluginDescriptionCount() const
+{
+    const juce::ScopedLock lock(pluginListLock);
+    return knownPluginList.getTypes().size();
 }
 
 bool PluginHostManager::saveKnownPluginsToFile(const juce::File& xmlFile) const
