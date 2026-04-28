@@ -9,6 +9,7 @@ set(FORGE7_SOURCES
     Audio/CrossfadeMixer.cpp
 
     PluginHost/PluginHostManager.cpp
+    PluginHost/PluginScanSkipStore.cpp
     PluginHost/PluginChain.cpp
     PluginHost/PluginSlot.cpp
     PluginHost/BridgedPluginManager.cpp

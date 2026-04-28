@@ -115,39 +115,6 @@ juce::AudioPluginFormat* findVst3Format(juce::AudioPluginFormatManager& fm)
     return nullptr;
 }
 
-/** JUCE writes paths here immediately before each plugin probe; if the process crashes mid-load,
- * the path remains so the next launch blacklists it and scans remaining plugins first. */
-juce::File getDeadMansPedalFile()
-{
-    return juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-        .getChildFile("FORGE7")
-        .getChildFile("dead_mans_pedal.txt");
-}
-
-/** Bundles known to fault the host during `PluginDirectoryScanner` / `findAllTypesForFile` (not fixable here).
-
-    Auburn Sounds Graillon 2 (x86_64): crashes in D runtime TLS (`pthread_getspecific` → `_D2rt…getTLSRange`)
-    even on the main thread — skip by bundle path substring. */
-bool isBuiltinSkippedVst3Path(const juce::String& fullPath)
-{
-    const juce::String p = fullPath.toLowerCase();
-    return p.contains("graillon");
-}
-
-void removeBuiltinSkippedVst3Bundles(juce::StringArray& pluginPaths)
-{
-    for (int i = pluginPaths.size(); --i >= 0;)
-    {
-        if (isBuiltinSkippedVst3Path(pluginPaths[i]))
-        {
-            Logger::warn(
-                "FORGE7: skipping VST3 bundle (incompatible with in-process scan on this platform) — "
-                + pluginPaths[i]);
-            pluginPaths.remove(i);
-        }
-    }
-}
-
 } // namespace
 
 PluginHostManager::PluginHostManager()
@@ -155,6 +122,11 @@ PluginHostManager::PluginHostManager()
     formatManager.addDefaultFormats();
 
     logRegisteredAudioPluginFormats(formatManager);
+
+    pluginScanSkips.load();
+    pluginScanSkips.recoverFromCrashProbeFile();
+    pluginScanSkips.pruneStaleEntries();
+    pluginScanSkips.save();
 
     chains[0] = std::make_unique<PluginChain>();
     chains[1] = std::make_unique<PluginChain>();
@@ -329,37 +301,52 @@ int PluginHostManager::scanVST3PluginsBlocking()
             Logger::warn("FORGE7: skipping scanner path (not a directory) — " + dir.getFullPathName());
     }
 
-    Logger::info("FORGE7: PluginDirectoryScanner — VST3 only; num paths: " + juce::String(searchPaths.getNumPaths())
-                 + "; " + searchPaths.toString());
+    Logger::info("FORGE7: VST3 scan — paths: " + juce::String(searchPaths.getNumPaths()) + "; "
+                 + searchPaths.toString());
 
-    const juce::File deadMansPedal = getDeadMansPedalFile();
+    Logger::info("FORGE7: plugin scan skips file — " + pluginScanSkips.getSkipsFile().getFullPathName());
 
-    if (!deadMansPedal.getParentDirectory().createDirectory())
-        Logger::warn("FORGE7: could not create application data folder for dead man's pedal — "
-                     + deadMansPedal.getParentDirectory().getFullPathName());
-
-    Logger::info("FORGE7: dead man's pedal file — " + deadMansPedal.getFullPathName());
-
-    juce::PluginDirectoryScanner scanner(knownPluginList,
-                                         *vst3Format,
-                                         searchPaths,
-                                         true,
-                                         deadMansPedal,
-                                         false);
+    pluginScanSkips.pruneStaleEntries();
+    pluginScanSkips.save();
 
     juce::StringArray pathsToScan = vst3Format->searchPathsForPlugins(searchPaths, true, false);
-    removeBuiltinSkippedVst3Bundles(pathsToScan);
-    scanner.setFilesOrIdentifiersToScan(pathsToScan);
+    pathsToScan.sort(true);
 
-    juce::String nameBeingScanned;
-
-    while (scanner.scanNextFile(true, nameBeingScanned))
+    for (const auto& bundlePath : pathsToScan)
     {
-        Logger::info("FORGE7: VST3 scanned OK — " + nameBeingScanned);
+        if (bundlePath.isEmpty())
+            continue;
+
+        if (pluginScanSkips.shouldSkipScanning(bundlePath))
+        {
+            Logger::warn("FORGE7: skipping VST3 (stored skip matches this bundle revision) — " + bundlePath);
+            continue;
+        }
+
+        const juce::File bundle(bundlePath);
+
+        if (!bundle.exists())
+            continue;
+
+        const auto modMs =
+            static_cast<juce::int64>(bundle.getLastModificationTime().toMilliseconds());
+
+        pluginScanSkips.writePendingProbe(bundlePath, modMs);
+
+        juce::OwnedArray<juce::PluginDescription> typesFound;
+
+        knownPluginList.scanAndAddFile(bundlePath, true, typesFound, *vst3Format);
+
+        pluginScanSkips.clearPendingProbe();
+
+        if (typesFound.size() > 0)
+            Logger::info("FORGE7: VST3 scanned OK — " + bundle.getFileName());
 
         if (shutdownFlag.load(std::memory_order_relaxed))
             break;
     }
+
+    knownPluginList.scanFinished();
 
     const size_t countAfter = knownPluginList.getTypes().size();
     const int added = static_cast<int>(countAfter - countBefore);
@@ -407,6 +394,13 @@ void PluginHostManager::scanVST3PluginsAsync(std::function<void(int numDescripti
 void PluginHostManager::scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished)
 {
     scanVST3PluginsAsync(std::move(onFinished));
+}
+
+void PluginHostManager::clearPluginScanSkips()
+{
+    const juce::ScopedLock lock(pluginListLock);
+    pluginScanSkips.clearAllEntries();
+    pluginScanSkips.save();
 }
 
 int PluginHostManager::getKnownPluginCount() const

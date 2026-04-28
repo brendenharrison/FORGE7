@@ -10,6 +10,8 @@
 
 #include "../Audio/CrossfadeMixer.h"
 
+#include "PluginScanSkipStore.h"
+
 namespace forge7
 {
 
@@ -67,6 +69,9 @@ public:
 
     /** Same as `scanVST3PluginsAsync` (VST3 scan runs on the message thread). */
     void scanAllPluginsAsync(std::function<void(int numDescriptionsAdded)> onFinished);
+
+    /** Clears mod-time scan skips (crash skips and any future user-managed skips). Next scan probes every bundle again. */
+    void clearPluginScanSkips();
 
     /** Same as `getKnownPluginDescriptionCount()` — total entries in `KnownPluginList` under lock. */
     int getKnownPluginCount() const;
@@ -160,6 +165,8 @@ private:
     int crossfadeScratchCapacity { 0 };
 
     std::atomic<bool> shutdownFlag { false };
+
+    PluginScanSkipStore pluginScanSkips;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginHostManager)
 };
