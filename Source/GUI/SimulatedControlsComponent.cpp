@@ -16,6 +16,7 @@
 #include "ProjectLibraryDialogs.h"
 #include "../Storage/ProjectSerializer.h"
 #include "../Utilities/Logger.h"
+#include "HardwareAssignableUi.h"
 #include "NavigationStatus.h"
 
 namespace forge7
@@ -419,7 +420,7 @@ void SimulatedControlsComponent::emitEncoderPress(const HardwareControlId pressO
 
 void SimulatedControlsComponent::wireButtons()
 {
-    auto style = [](juce::Button& b)
+    auto styleNeutral = [](juce::Button& b)
     {
         b.setColour(juce::TextButton::buttonColourId, panelBg().brighter(0.12f));
         b.setColour(juce::TextButton::textColourOffId, text());
@@ -432,9 +433,7 @@ void SimulatedControlsComponent::wireButtons()
                                        juce::dontSendNotification);
     addAndMakeVisible(shortcutLibraryStatusLabel);
 
-    for (auto* b : { &assign1Button,
-                     &assign2Button,
-                     &chainPrevButton,
+    for (auto* b : { &chainPrevButton,
                      &chainNextButton,
                      &encoderLeftButton,
                      &encoderRightButton,
@@ -449,9 +448,17 @@ void SimulatedControlsComponent::wireButtons()
                      &shortcutExportProject,
                      &shortcutImportProject })
     {
-        style(*b);
+        styleNeutral(*b);
         addAndMakeVisible(*b);
     }
+
+    addAndMakeVisible(assign1Button);
+    addAndMakeVisible(assign2Button);
+
+    assign1Button.setColour(juce::TextButton::buttonColourId, button1Colour().withAlpha(0.34f));
+    assign1Button.setColour(juce::TextButton::textColourOffId, juce::Colours::white.withAlpha(0.95f));
+    assign2Button.setColour(juce::TextButton::buttonColourId, button2Colour().withAlpha(0.40f));
+    assign2Button.setColour(juce::TextButton::textColourOffId, juce::Colour(0xff1f1a14));
 
     chainPrevButton.onClick = [this]()
     {
@@ -656,10 +663,10 @@ void SimulatedControlsComponent::refreshDebugLabels()
             ev += "K4";
             break;
         case HardwareControlId::AssignButton1:
-            ev += "Assign1";
+            ev += "Button1";
             break;
         case HardwareControlId::AssignButton2:
-            ev += "Assign2";
+            ev += "Button2";
             break;
         case HardwareControlId::ChainPreviousButton:
             ev += "Chain-";

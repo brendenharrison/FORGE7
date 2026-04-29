@@ -88,7 +88,7 @@ The simulated controls exist to validate the embedded control pipeline before ph
 
 Expected mappings:
 - Encoder rotate/press/long press behaves like the physical encoder.
-- Assign buttons and Chain +/- buttons behave like physical buttons.
+- Button 1 / Button 2 and Chain +/- buttons behave like physical buttons.
 - K1-K4 behave like **relative encoders** by default.
 
 Dev-only absolute knob test:

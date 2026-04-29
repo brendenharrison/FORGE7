@@ -46,6 +46,7 @@ set(FORGE7_SOURCES
     GUI/PerformanceViewComponent.cpp
     GUI/PluginBrowserComponent.cpp
     GUI/PluginInspectorComponent.cpp
+    GUI/ChainControlsPanelComponent.cpp
     GUI/PluginEditorHostWindow.cpp
     GUI/SettingsComponent.cpp
     GUI/AudioHealthMonitor.cpp

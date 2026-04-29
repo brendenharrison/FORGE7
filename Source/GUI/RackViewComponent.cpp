@@ -19,7 +19,7 @@
 #include "NameEntryModal.h"
 #include "NavigationStatus.h"
 #include "PluginBrowserComponent.h"
-#include "PluginInspectorComponent.h"
+#include "ChainControlsPanelComponent.h"
 #include "RackSlotCard.h"
 
 namespace forge7
@@ -377,10 +377,13 @@ RackViewComponent::RackViewComponent(AppContext& context)
     {
         inspectorExpanded = !inspectorExpanded;
 
-        if (pluginInspector != nullptr)
+        if (chainControlsPanel != nullptr)
         {
-            pluginInspector->setVisible(inspectorExpanded);
-            ctxDetailButton.setButtonText(inspectorExpanded ? "Hide" : "Details");
+            chainControlsPanel->setVisible(inspectorExpanded);
+            ctxDetailButton.setButtonText(inspectorExpanded ? "Hide" : "Controls");
+
+            if (inspectorExpanded)
+                chainControlsPanel->refreshFromHost();
         }
 
         resized();
@@ -470,19 +473,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
     pluginBrowser->setInterceptsMouseClicks(true, true);
     pluginBrowser->toFront(false);
 
-    pluginInspector = std::make_unique<PluginInspectorComponent>(appContext);
-    pluginInspector->onModelChanged = [this]()
-    {
-        refreshSlotDisplays();
-        syncEncoderFocus();
-    };
-    pluginInspector->onMappingsChanged = [this]()
-    {
-        refreshSlotDisplays();
-    };
-    pluginInspector->setVisible(false);
-
-    addChildComponent(*pluginInspector);
+    chainControlsPanel = std::make_unique<ChainControlsPanelComponent>(appContext);
+    chainControlsPanel->setVisible(false);
+    addChildComponent(*chainControlsPanel);
 
     startTimerHz(4);
 }
@@ -598,13 +591,13 @@ void RackViewComponent::resized()
 
     area.removeFromBottom(4);
 
-    const int inspectorH = inspectorExpanded ? juce::jlimit(140, 220, juce::roundToInt(0.28f * (float)getHeight()))
+    const int inspectorH = inspectorExpanded ? juce::jlimit(140, 240, juce::roundToInt(0.30f * (float)getHeight()))
                                              : 0;
 
-    if (inspectorExpanded && pluginInspector != nullptr)
-        pluginInspector->setBounds(area.removeFromBottom(inspectorH).reduced(pad, 0));
-    else if (pluginInspector != nullptr)
-        pluginInspector->setBounds({});
+    if (inspectorExpanded && chainControlsPanel != nullptr)
+        chainControlsPanel->setBounds(area.removeFromBottom(inspectorH).reduced(pad, 0));
+    else if (chainControlsPanel != nullptr)
+        chainControlsPanel->setBounds({});
 
     area.removeFromBottom(inspectorExpanded ? 4 : 0);
 
@@ -837,8 +830,8 @@ void RackViewComponent::refreshSlotDisplays()
         slotCards[static_cast<size_t>(i)]->setSelected(selectedSlotIndex == i);
     }
 
-    if (pluginInspector != nullptr)
-        pluginInspector->refreshFromHost();
+    if (chainControlsPanel != nullptr && inspectorExpanded)
+        chainControlsPanel->refreshFromHost();
 
     // Context strip (selection-dependent labels / toggles)
     auto* chainForUi = appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
@@ -867,7 +860,7 @@ void RackViewComponent::refreshSlotDisplays()
     ctxRemoveButton.setEnabled(hasBlock);
     ctxReplaceButton.setEnabled(haveSlot);
     ctxEditorButton.setEnabled(hasBlock);
-    ctxDetailButton.setEnabled(hasBlock);
+    ctxDetailButton.setEnabled(nav.hasActiveChain());
 
     if (haveSlot)
         ctxReplaceButton.setButtonText((ctxInfo.isEmpty && !ctxInfo.missingPlugin) ? "Add" : "Replace");
@@ -921,8 +914,7 @@ void RackViewComponent::setSelectedSlot(const int slotIndex)
         if (slotCards[static_cast<size_t>(i)] != nullptr)
             slotCards[static_cast<size_t>(i)]->setSelected(i == selectedSlotIndex);
 
-    if (pluginInspector != nullptr)
-        pluginInspector->setInspectedSlot(selectedSlotIndex);
+    // Details panel is chain-level (not slot-level); no per-slot selection binding.
 }
 
 void RackViewComponent::selectRackSlot(const int slotIndex)

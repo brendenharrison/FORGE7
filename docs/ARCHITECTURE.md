@@ -27,7 +27,7 @@ Key nodes:
 - `ProjectSerializer`: JSON save/load and host hydration
 - `ProjectSession`: high-level controller for safe navigation and dirty state
 - `ControlManager`: normalization boundary for hardware events (MIDI / simulated / future USB)
-- `ParameterMappingManager`: K1-K4 + assign buttons to plugin parameter bindings (scene/chain scoped)
+- `ParameterMappingManager`: K1-K4 + Button 1 / Button 2 (`HardwareControlId::AssignButton1` / `AssignButton2`) to plugin parameter bindings (scene/chain scoped)
 - `EncoderNavigator`: focus ring + encoder navigation routing for touch surfaces
 
 ## Domain model: Project > Scene > Chain
@@ -87,7 +87,7 @@ All physical or simulated control inputs produce `HardwareControlEvent` and go t
 
 Routing:
 - Mapping and listeners are delivered on the JUCE message thread.
-- Knob + assign button events flow into `ParameterMappingManager`.
+- Knob + Button 1 / Button 2 events flow into `ParameterMappingManager`.
 - Encoder events flow into `EncoderNavigator`.
 
 ### K1-K4: relative encoder direction

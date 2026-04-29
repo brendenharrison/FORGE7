@@ -13,7 +13,7 @@ namespace forge7
 
 struct AppContext;
 
-/** Live performance screen: shows Project / Scene / Chain hierarchy, K1-K4, assigns,
+/** Live performance screen: shows Project / Scene / Chain hierarchy, K1-K4, Button 1-2,
 
     Chain - / Chain + navigation, BPM/CPU - tuned for ~7\" embedded pedal use. */
 class PerformanceViewComponent final : public juce::Component,
@@ -61,6 +61,9 @@ private:
 
     class KnobCard;
     std::array<std::unique_ptr<KnobCard>, 4> knobCards;
+
+    std::unique_ptr<juce::Component> assignButton1Led;
+    std::unique_ptr<juce::Component> assignButton2Led;
 
     juce::Label assign1TitleLabel;
     juce::Label assign1FunctionLabel;

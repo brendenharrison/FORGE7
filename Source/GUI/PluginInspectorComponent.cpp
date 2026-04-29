@@ -13,6 +13,7 @@
 #include "../PluginHost/PluginSlot.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
+#include "HardwareAssignableUi.h"
 
 namespace forge7
 {
@@ -28,27 +29,6 @@ void styleSecondaryButton(juce::TextButton& b)
 {
     b.setColour(juce::TextButton::buttonColourId, panelBg().brighter(0.12f));
     b.setColour(juce::TextButton::textColourOffId, textColour());
-}
-
-juce::String hardwareShortName(const HardwareControlId id)
-{
-    switch (id)
-    {
-        case HardwareControlId::Knob1:
-            return "K1";
-        case HardwareControlId::Knob2:
-            return "K2";
-        case HardwareControlId::Knob3:
-            return "K3";
-        case HardwareControlId::Knob4:
-            return "K4";
-        case HardwareControlId::AssignButton1:
-            return "Assign 1";
-        case HardwareControlId::AssignButton2:
-            return "Assign 2";
-        default:
-            return {};
-    }
 }
 
 const ParameterMappingDescriptor* findMappingForParameter(const juce::Array<ParameterMappingDescriptor>& rows,
@@ -206,7 +186,8 @@ public:
         const auto rows = appContext.parameterMappingManager->getAllMappings();
 
         if (const auto* found = findMappingForParameter(rows, sceneId, varId, slotIndex, summary))
-            assignButton.setButtonText(juce::String("Mapped: ") + hardwareShortName(found->hardwareControlId));
+            assignButton.setButtonText(juce::String("Mapped: ")
+                                       + hardwareDisplayShortName(found->hardwareControlId));
         else
             assignButton.setButtonText("Assign...");
     }
@@ -234,8 +215,8 @@ private:
         menu.addItem(12, "K3");
         menu.addItem(13, "K4");
         menu.addSeparator();
-        menu.addItem(14, "Assign button 1");
-        menu.addItem(15, "Assign button 2");
+        menu.addItem(14, "Button 1");
+        menu.addItem(15, "Button 2");
         menu.addSeparator();
         menu.addItem(1, "Clear mapping");
 

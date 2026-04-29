@@ -4,7 +4,7 @@ FORGE7 is designed around an embedded pedal UI:
 - 7-inch touchscreen
 - rotary encoder with press + long press
 - four assignable encoders (K1-K4)
-- assign buttons
+- Button 1 and Button 2 (programmable; planned hardware uses a blue LED marker on Button 1 and a yellow/amber LED on Button 2 so players can tell them apart at a distance)
 - chain switching buttons
 
 The macOS app is a development and validation harness for that UX.

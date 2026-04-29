@@ -21,12 +21,38 @@
 #include "../Scene/SceneManager.h"
 #include "../Utilities/Logger.h"
 #include "../App/ProjectSession.h"
+#include "HardwareAssignableUi.h"
 #include "NavigationStatus.h"
 
 namespace forge7
 {
 namespace
 {
+
+struct LedDot final : public juce::Component
+{
+    juce::Colour colour;
+
+    explicit LedDot(juce::Colour c)
+        : colour(c)
+    {
+        setInterceptsMouseClicks(false, false);
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto e = getLocalBounds().toFloat().reduced(2.0f);
+        g.setColour(colour.withAlpha(0.35f));
+        g.fillEllipse(e.expanded(1.8f));
+
+        g.setColour(colour);
+        g.fillEllipse(e);
+
+        g.setColour(colour.brighter(0.25f));
+        g.drawEllipse(e, 1.15f);
+    }
+};
+
 juce::Colour perfBg() noexcept { return juce::Colour(0xff0d0f12); }
 juce::Colour perfPanel() noexcept { return juce::Colour(0xff161a20); }
 juce::Colour perfText() noexcept { return juce::Colour(0xffe8eaed); }
@@ -181,7 +207,8 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     simHwHintLabel.setJustificationType(juce::Justification::centredLeft);
     simHwHintLabel.setFont(juce::Font(12.0f));
     simHwHintLabel.setColour(juce::Label::textColourId, perfMuted());
-    simHwHintLabel.setText("Sim HW: use in-app drawer for K1-K4 / assigns / chain / encoder", juce::dontSendNotification);
+    simHwHintLabel.setText(
+        "Sim HW: use in-app drawer for K1-K4 / Button 1-2 / chain / encoder", juce::dontSendNotification);
     addAndMakeVisible(simHwHintLabel);
 #endif
 
@@ -305,8 +332,11 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
         addAndMakeVisible(*knobCards[i]);
     }
 
-    assign1TitleLabel.setText("Assign 1", juce::dontSendNotification);
-    styleHudLabel(assign1TitleLabel, 13.0f, perfMuted());
+    assignButton1Led = std::unique_ptr<juce::Component>(new LedDot(button1Colour()));
+    addAndMakeVisible(*assignButton1Led);
+
+    assign1TitleLabel.setText("Button 1", juce::dontSendNotification);
+    styleHudLabel(assign1TitleLabel, 13.0f, button1Colour());
     addAndMakeVisible(assign1TitleLabel);
 
     assign1FunctionLabel.setJustificationType(juce::Justification::centredLeft);
@@ -314,8 +344,11 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     assign1FunctionLabel.setColour(juce::Label::textColourId, perfText());
     addAndMakeVisible(assign1FunctionLabel);
 
-    assign2TitleLabel.setText("Assign 2", juce::dontSendNotification);
-    styleHudLabel(assign2TitleLabel, 13.0f, perfMuted());
+    assignButton2Led = std::unique_ptr<juce::Component>(new LedDot(button2Colour()));
+    addAndMakeVisible(*assignButton2Led);
+
+    assign2TitleLabel.setText("Button 2", juce::dontSendNotification);
+    styleHudLabel(assign2TitleLabel, 13.0f, button2Colour());
     addAndMakeVisible(assign2TitleLabel);
 
     assign2FunctionLabel.setJustificationType(juce::Justification::centredLeft);
@@ -636,13 +669,24 @@ void PerformanceViewComponent::resized()
 
     const int half = juce::jmax(130, assignRow.getWidth() / 2 - 8);
     auto a1 = assignRow.removeFromLeft(half).reduced(4, 2);
-    assign1TitleLabel.setBounds(a1.removeFromTop(18));
+    auto a1Head = a1.removeFromTop(18);
+
+    if (assignButton1Led != nullptr)
+        assignButton1Led->setBounds(a1Head.removeFromLeft(14).withSizeKeepingCentre(11, 11));
+
+    assign1TitleLabel.setBounds(a1Head);
+
     assign1FunctionLabel.setBounds(a1);
 
     assignRow.removeFromLeft(8);
 
     auto a2 = assignRow.removeFromLeft(half).reduced(4, 2);
-    assign2TitleLabel.setBounds(a2.removeFromTop(18));
+    auto a2Head = a2.removeFromTop(18);
+
+    if (assignButton2Led != nullptr)
+        assignButton2Led->setBounds(a2Head.removeFromLeft(14).withSizeKeepingCentre(11, 11));
+
+    assign2TitleLabel.setBounds(a2Head);
     assign2FunctionLabel.setBounds(a2);
 
     syncEncoderFocus();

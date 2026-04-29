@@ -9,6 +9,7 @@
 #include "../Controls/EncoderNavigator.h"
 #include "../Controls/HardwareControlTypes.h"
 #include "../Controls/ParameterMappingManager.h"
+#include "HardwareAssignableUi.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../PluginHost/PluginSlot.h"
@@ -102,8 +103,9 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     };
     addAndMakeVisible(assignModeToggle);
 
-    assignHintLabel.setText("Select a parameter, then twist K1-K4 to assign (or use Assign buttons for toggles).",
-                            juce::dontSendNotification);
+    assignHintLabel.setText(
+        "Select a parameter, then twist K1-K4 to assign (or press Button 1 / Button 2 for toggles).",
+        juce::dontSendNotification);
     assignHintLabel.setFont(juce::Font(13.0f));
     assignHintLabel.setColour(juce::Label::textColourId, muted());
     assignHintLabel.setJustificationType(juce::Justification::centredLeft);
@@ -124,12 +126,13 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
         addAndMakeVisible(l);
     }
 
-    for (auto& l : assignMappingLabels)
+    for (size_t i = 0; i < assignMappingLabels.size(); ++i)
     {
-        l.setJustificationType(juce::Justification::centredLeft);
-        l.setFont(juce::Font(13.0f));
-        l.setColour(juce::Label::textColourId, text());
-        addAndMakeVisible(l);
+        assignMappingLabels[i].setJustificationType(juce::Justification::centredLeft);
+        assignMappingLabels[i].setFont(juce::Font(13.0f));
+        assignMappingLabels[i].setColour(juce::Label::textColourId,
+                                          i == 0 ? button1Colour() : button2Colour());
+        addAndMakeVisible(assignMappingLabels[i]);
     }
 
     viewFitHeight.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
@@ -353,10 +356,10 @@ void FullscreenPluginEditorComponent::refreshMappingStrip()
                                                                + mappingLabelForKnob(rows, sid, vid, slotIndex, knobs[i]),
                                                             juce::dontSendNotification);
 
-    assignMappingLabels[0].setText(juce::String("A1: ")
+    assignMappingLabels[0].setText(juce::String("Button 1: ")
                                        + mappingLabelForKnob(rows, sid, vid, slotIndex, HardwareControlId::AssignButton1),
                                    juce::dontSendNotification);
-    assignMappingLabels[1].setText(juce::String("A2: ")
+    assignMappingLabels[1].setText(juce::String("Button 2: ")
                                        + mappingLabelForKnob(rows, sid, vid, slotIndex, HardwareControlId::AssignButton2),
                                    juce::dontSendNotification);
 

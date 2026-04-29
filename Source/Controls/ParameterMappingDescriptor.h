@@ -20,7 +20,7 @@ namespace forge7
       into `[minValue, maxValue]` where both are **plugin-normalized** 0...1 (`AudioProcessorParameter`
       domain), then apply `invert` to the hardware side before scaling.
 
-    **Buttons** (`AssignButton1` / `AssignButton2`)
+    **Buttons** (user-facing: Button 1 / Button 2; ids `AssignButton1` / `AssignButton2`)
     - `momentaryMode`: pressed -> `maxValue`, released -> `minValue` (typical "hold" behaviour).
     - `toggleMode`: each press alternates between `minValue` and `maxValue` (used for bool/switch params).
 

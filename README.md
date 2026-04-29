@@ -74,7 +74,7 @@ Note: older internal code may still use **ChainVariation** in places. User-facin
 
 **Simulated Hardware**
 - Development-only in-app controls (drawer/window).
-- Simulates K1-K4, Assign 1/2, Chain -/+, encoder rotate/press/long press.
+- Simulates K1-K4, Button 1 / Button 2, Chain -/+, encoder rotate/press/long press.
 
 ## Embedded UX Principles
 
@@ -82,7 +82,7 @@ FORGE7 is intended for a hardware pedal with:
 - 7-inch touchscreen
 - Large clickable encoder
 - Four assignable encoders (K1-K4)
-- Assign buttons
+- Two assignable buttons labeled **Button 1** and **Button 2** (planned hardware: blue LED on Button 1, yellow/amber LED on Button 2 for easy stage identification)
 - Chain switching buttons
 - No required physical keyboard
 - No required mouse
@@ -171,6 +171,9 @@ Current implementation status:
 - Assignment workflow exists.
 - Relative/no-jump behavior is being refined.
 - Simulated hardware is expected to follow the same relative-control model.
+
+**Button 1 / Button 2** map to discrete or toggle-like plugin parameters (same scene/chain scoping as K1-K4).
+Planned hardware uses a blue LED cue on Button 1 and a yellow/amber LED cue on Button 2 so musicians can distinguish them when looking down at the pedal.
 
 ## Encoder Navigation
 

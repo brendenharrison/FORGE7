@@ -49,8 +49,8 @@ private:
     std::array<juce::TextButton, 4> knobDownButtons {};
     std::array<juce::TextButton, 4> knobUpButtons {};
 
-    juce::TextButton assign1Button { "Assign 1" };
-    juce::TextButton assign2Button { "Assign 2" };
+    juce::TextButton assign1Button { "Button 1" };
+    juce::TextButton assign2Button { "Button 2" };
 
     juce::TextButton chainPrevButton { "Chain -" };
     juce::TextButton chainNextButton { "Chain +" };

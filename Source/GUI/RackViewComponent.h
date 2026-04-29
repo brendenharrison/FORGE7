@@ -16,7 +16,7 @@ namespace forge7
 
 struct AppContext;
 class PluginBrowserComponent;
-class PluginInspectorComponent;
+class ChainControlsPanelComponent;
 
 /** Edit Mode ("Rack"): status bar, dominant horizontal chain, optional collapsible inspector,
 
@@ -150,7 +150,7 @@ private:
     juce::TextButton ctxRemoveButton { "Remove" };
     juce::TextButton ctxReplaceButton { "Replace" };
     juce::TextButton ctxEditorButton { "Editor" };
-    juce::TextButton ctxDetailButton { "Details" };
+    juce::TextButton ctxDetailButton { "Controls" };
 
     juce::TextButton navPerformanceButton;
     juce::TextButton settingsButton { "Settings" };
@@ -164,7 +164,7 @@ private:
     std::unique_ptr<juce::Component> browserOverlay;
     std::unique_ptr<PluginBrowserComponent> pluginBrowser;
 
-    std::unique_ptr<PluginInspectorComponent> pluginInspector;
+    std::unique_ptr<ChainControlsPanelComponent> chainControlsPanel;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(RackViewComponent)
 };
