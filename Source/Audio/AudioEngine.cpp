@@ -17,6 +17,122 @@ constexpr int kPreferredBufferSize = 64;
 constexpr int kFallbackBufferSize = 128;
 constexpr double kTargetSampleRate = 48000.0;
 constexpr float kMaxLinearGain = 4.0f;
+constexpr int kInputPeakChannels = 8;
+
+void clearInputChannelPeaks(std::array<std::atomic<float>, static_cast<size_t>(kInputPeakChannels)>& peaks) noexcept
+{
+    for (auto& p : peaks)
+        p.store(0.0f, std::memory_order_relaxed);
+}
+
+void updateInputChannelPeaks(const float* const* inputChannelData,
+                             int numInputChannels,
+                             int numSamples,
+                             std::array<std::atomic<float>, static_cast<size_t>(kInputPeakChannels)>& peaks) noexcept
+{
+    for (int ch = 0; ch < kInputPeakChannels; ++ch)
+    {
+        float pk = 0.0f;
+        if (inputChannelData != nullptr && ch < numInputChannels && inputChannelData[ch] != nullptr)
+        {
+            const float* inCh = inputChannelData[ch];
+            for (int i = 0; i < numSamples; ++i)
+                pk = juce::jmax(pk, std::abs(inCh[i]));
+        }
+        peaks[static_cast<size_t>(ch)].store(juce::jlimit(0.0f, 1.0f, pk), std::memory_order_relaxed);
+    }
+}
+
+float maxStoredInputPeaks(const std::array<std::atomic<float>, static_cast<size_t>(kInputPeakChannels)>& peaks) noexcept
+{
+    float m = 0.0f;
+    for (const auto& p : peaks)
+        m = juce::jmax(m, p.load(std::memory_order_relaxed));
+    return m;
+}
+
+/** Returns number of channels mixed into mono; `outSelectedCh` is first contributing channel index or -1. */
+int fillMonoFromInputSelection(const float* const* inputChannelData,
+                               int numInputChannels,
+                               int numSamples,
+                               float* mono,
+                               float gain,
+                               InputSourceMode mode,
+                               int& outSelectedCh) noexcept
+{
+    outSelectedCh = -1;
+    if (mono == nullptr || numSamples <= 0)
+        return 0;
+
+    if (inputChannelData == nullptr || numInputChannels <= 0)
+    {
+        juce::FloatVectorOperations::clear(mono, numSamples);
+        return 0;
+    }
+
+    switch (mode)
+    {
+        case InputSourceMode::FirstNonNull:
+            for (int ch = 0; ch < numInputChannels; ++ch)
+            {
+                const float* inCh = inputChannelData[ch];
+                if (inCh == nullptr)
+                    continue;
+                juce::FloatVectorOperations::copyWithMultiply(mono, inCh, gain, numSamples);
+                outSelectedCh = ch;
+                return 1;
+            }
+            break;
+
+        case InputSourceMode::Channel1:
+            if (numInputChannels > 0 && inputChannelData[0] != nullptr)
+            {
+                juce::FloatVectorOperations::copyWithMultiply(mono, inputChannelData[0], gain, numSamples);
+                outSelectedCh = 0;
+                return 1;
+            }
+            break;
+
+        case InputSourceMode::Channel2:
+            if (numInputChannels > 1 && inputChannelData[1] != nullptr)
+            {
+                juce::FloatVectorOperations::copyWithMultiply(mono, inputChannelData[1], gain, numSamples);
+                outSelectedCh = 1;
+                return 1;
+            }
+            break;
+
+        case InputSourceMode::MixAll: {
+            int count = 0;
+            for (int ch = 0; ch < numInputChannels; ++ch)
+            {
+                const float* inCh = inputChannelData[ch];
+                if (inCh == nullptr)
+                    continue;
+                if (count == 0)
+                {
+                    outSelectedCh = ch;
+                    juce::FloatVectorOperations::copyWithMultiply(mono, inCh, gain, numSamples);
+                }
+                else
+                    juce::FloatVectorOperations::addWithMultiply(mono, inCh, gain, numSamples);
+                ++count;
+            }
+            if (count > 1)
+            {
+                const float scale = 1.0f / static_cast<float>(count);
+                juce::FloatVectorOperations::multiply(mono, scale, numSamples);
+            }
+            return count;
+        }
+
+        default:
+            break;
+    }
+
+    juce::FloatVectorOperations::clear(mono, numSamples);
+    return 0;
+}
 
 // #region agent log
 // Tiny NDJSON appender for debug session af0f62 - message thread only.
@@ -45,6 +161,7 @@ void debugNdjsonAppend(const juce::String& location,
 AudioEngine::AudioEngine(PluginHostManager& host)
     : pluginHostManager(host)
 {
+    clearInputChannelPeaks(inputChannelRawPeaks);
 }
 
 AudioEngine::~AudioEngine()
@@ -216,6 +333,28 @@ void AudioEngine::setInputMonitorEnabled(bool shouldMonitor)
     inputMonitorEnabled.store(shouldMonitor ? 1u : 0u, std::memory_order_relaxed);
 }
 
+void AudioEngine::setInputSourceMode(InputSourceMode mode) noexcept
+{
+    inputSourceModeStorage.store(static_cast<uint32_t>(mode), std::memory_order_relaxed);
+}
+
+InputSourceMode AudioEngine::getInputSourceMode() const noexcept
+{
+    return static_cast<InputSourceMode>(inputSourceModeStorage.load(std::memory_order_relaxed));
+}
+
+void AudioEngine::setInputProbeEnabled(bool shouldProbe) noexcept
+{
+    inputProbeMode.store(shouldProbe ? 1u : 0u, std::memory_order_relaxed);
+}
+
+float AudioEngine::getInputChannelRawPeak(int channelIndex) const noexcept
+{
+    if (channelIndex < 0 || channelIndex >= kInputPeakChannels)
+        return 0.0f;
+    return inputChannelRawPeaks[static_cast<size_t>(channelIndex)].load(std::memory_order_relaxed);
+}
+
 float AudioEngine::clampGain(float g) noexcept
 {
     return juce::jlimit(0.0f, kMaxLinearGain, g);
@@ -243,6 +382,7 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         lastMixedInputChannelCount.store(0, std::memory_order_relaxed);
         inputPresentFlag.store(0u, std::memory_order_relaxed);
         meterInputPeakRaw.store(0.0f, std::memory_order_relaxed);
+        clearInputChannelPeaks(inputChannelRawPeaks);
         return;
     }
 
@@ -257,51 +397,81 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         lastMixedInputChannelCount.store(0, std::memory_order_relaxed);
         inputPresentFlag.store(0u, std::memory_order_relaxed);
         meterInputPeakRaw.store(0.0f, std::memory_order_relaxed);
+        clearInputChannelPeaks(inputChannelRawPeaks);
         return;
     }
 
+    updateInputChannelPeaks(inputChannelData, numInputChannels, numSamples, inputChannelRawPeaks);
+
     float* mono = monoWorkBuffer.data();
+
+    const auto sourceMode = static_cast<InputSourceMode>(inputSourceModeStorage.load(std::memory_order_relaxed));
+    const bool probe = inputProbeMode.load(std::memory_order_relaxed) != 0;
 
     int selectedInputChannel = -1;
     int mixedCount = 0;
 
-    float rawPeakPreGain = 0.0f;
+    const float rawPeakPreGain = maxStoredInputPeaks(inputChannelRawPeaks);
+
+    if (probe)
+    {
+        constexpr float kProbeGain = 1.0f;
+        mixedCount = fillMonoFromInputSelection(inputChannelData,
+                                                numInputChannels,
+                                                numSamples,
+                                                mono,
+                                                kProbeGain,
+                                                sourceMode,
+                                                selectedInputChannel);
+
+        meterInputPeakRaw.store(juce::jlimit(0.0f, 1.0f, rawPeakPreGain), std::memory_order_relaxed);
+
+        lastSelectedInputChannel.store(selectedInputChannel, std::memory_order_relaxed);
+        lastMixedInputChannelCount.store(mixedCount, std::memory_order_relaxed);
+        inputPresentFlag.store(mixedCount > 0 ? 1u : 0u, std::memory_order_relaxed);
+
+        if (mixedCount == 0)
+            juce::FloatVectorOperations::clear(mono, numSamples);
+
+        float inPeak = 0.0f;
+        for (int i = 0; i < numSamples; ++i)
+            inPeak = juce::jmax(inPeak, std::abs(mono[i]));
+
+        meterInputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+
+        for (int ch = 0; ch < numOutputChannels; ++ch)
+            if (outputChannelData[ch] != nullptr)
+                juce::FloatVectorOperations::clear(outputChannelData[ch], numSamples);
+
+        float* outPrimary = nullptr;
+        float* outSecondary = nullptr;
+        for (int ch = 0; ch < numOutputChannels; ++ch)
+        {
+            if (outputChannelData[ch] == nullptr)
+                continue;
+            if (outPrimary == nullptr)
+                outPrimary = outputChannelData[ch];
+            else if (outSecondary == nullptr)
+            {
+                outSecondary = outputChannelData[ch];
+                break;
+            }
+        }
+
+        if (outPrimary != nullptr)
+            juce::FloatVectorOperations::copy(outPrimary, mono, numSamples);
+        if (outSecondary != nullptr && outSecondary != outPrimary)
+            juce::FloatVectorOperations::copy(outSecondary, mono, numSamples);
+
+        meterOutputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+        return;
+    }
 
     const float inGain = inputGainLinear.load(std::memory_order_relaxed);
-
-    if (inputChannelData != nullptr)
-    {
-        for (int ch = 0; ch < numInputChannels; ++ch)
-        {
-            const float* inCh = inputChannelData[ch];
-            if (inCh == nullptr)
-                continue;
-
-            float chPeak = 0.0f;
-            for (int i = 0; i < numSamples; ++i)
-                chPeak = juce::jmax(chPeak, std::abs(inCh[i]));
-
-            rawPeakPreGain = juce::jmax(rawPeakPreGain, chPeak);
-
-            if (mixedCount == 0)
-            {
-                selectedInputChannel = ch;
-                juce::FloatVectorOperations::copyWithMultiply(mono, inCh, inGain, numSamples);
-            }
-            else
-                juce::FloatVectorOperations::addWithMultiply(mono, inCh, inGain, numSamples);
-
-            ++mixedCount;
-        }
-    }
+    mixedCount = fillMonoFromInputSelection(
+        inputChannelData, numInputChannels, numSamples, mono, inGain, sourceMode, selectedInputChannel);
 
     meterInputPeakRaw.store(juce::jlimit(0.0f, 1.0f, rawPeakPreGain), std::memory_order_relaxed);
-
-    if (mixedCount > 1)
-    {
-        const float scale = 1.0f / static_cast<float>(mixedCount);
-        juce::FloatVectorOperations::multiply(mono, scale, numSamples);
-    }
 
     lastSelectedInputChannel.store(selectedInputChannel, std::memory_order_relaxed);
     lastMixedInputChannelCount.store(mixedCount, std::memory_order_relaxed);
@@ -439,6 +609,7 @@ void AudioEngine::audioDeviceStopped()
     lastNumInputChannels.store(0, std::memory_order_relaxed);
     lastNumOutputChannels.store(0, std::memory_order_relaxed);
     inputPresentFlag.store(0u, std::memory_order_relaxed);
+    clearInputChannelPeaks(inputChannelRawPeaks);
 }
 
 } // namespace forge7

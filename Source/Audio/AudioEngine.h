@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <atomic>
 #include <vector>
 
@@ -7,6 +8,14 @@
 
 namespace forge7
 {
+
+enum class InputSourceMode : uint32_t
+{
+    FirstNonNull = 0,
+    Channel1 = 1,
+    Channel2 = 2,
+    MixAll = 3
+};
 
 class PluginHostManager;
 
@@ -62,6 +71,17 @@ public:
     void setInputMonitorEnabled(bool shouldMonitor);
     bool isInputMonitorEnabled() const noexcept { return inputMonitorEnabled.load(std::memory_order_relaxed) != 0; }
 
+    /** Message-thread-only: how mono input is derived from device channels (applies to normal path and input probe). Default Channel1. */
+    void setInputSourceMode(InputSourceMode mode) noexcept;
+    InputSourceMode getInputSourceMode() const noexcept;
+
+    /** Message-thread-only: raw hardware input probe (no plugins, no global bypass, no input-monitor mute). */
+    void setInputProbeEnabled(bool shouldProbe) noexcept;
+    bool isInputProbeEnabled() const noexcept { return inputProbeMode.load(std::memory_order_relaxed) != 0; }
+
+    /** Raw peak [0, 1] for hardware input channel index (0-7), from last callback; GUI / message thread. */
+    float getInputChannelRawPeak(int channelIndex) const noexcept;
+
     /** Last-callback peak levels in [0, 1], written from RT; safe to read from GUI via relaxed loads. */
     float getSmoothedInputPeak() const noexcept { return meterInputPeak.load(std::memory_order_relaxed); }
     float getSmoothedOutputPeak() const noexcept { return meterOutputPeak.load(std::memory_order_relaxed); }
@@ -113,6 +133,10 @@ private:
     std::atomic<float> outputGainLinear { 1.0f };
     std::atomic<uint32_t> globalBypass { 0 };
     std::atomic<uint32_t> inputMonitorEnabled { 1 };
+    std::atomic<uint32_t> inputSourceModeStorage { static_cast<uint32_t>(InputSourceMode::Channel1) };
+    std::atomic<uint32_t> inputProbeMode { 0 };
+
+    std::array<std::atomic<float>, 8> inputChannelRawPeaks {};
 
     std::atomic<float> meterInputPeak { 0.0f };
     std::atomic<float> meterInputPeakRaw { 0.0f };

@@ -42,6 +42,20 @@ private:
     juce::TextButton saveAudioButton { "Save Audio Settings" };
     juce::Label saveStatusLabel;
 
+    juce::TextButton requestMicPermissionButton { "Request Mic Permission" };
+    juce::TextButton checkMicPermissionButton { "Check Mic Permission" };
+    juce::TextButton runInputProbeButton { "Run Input Probe" };
+    juce::ToggleButton inputProbeToggle { "Input Probe" };
+    juce::Label inputSourceHeadingLabel;
+    juce::ComboBox inputSourceCombo;
+    juce::Label micPermissionStatusLabel;
+    juce::Label micDeniedHintLabel;
+    juce::Label ch1RawPeakLabel;
+    juce::Label ch2RawPeakLabel;
+    juce::Label ch3RawPeakLabel;
+    juce::Label ch4RawPeakLabel;
+    juce::Label diagnosisLabel;
+
     std::unique_ptr<juce::AudioDeviceSelectorComponent> deviceSelector;
     std::unique_ptr<juce::Viewport> deviceSelectorViewport;
 

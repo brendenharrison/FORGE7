@@ -47,6 +47,12 @@ list(TRANSFORM FORGE7_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Source/"
 
 target_sources(Forge7 PRIVATE ${FORGE7_SOURCES_ABS})
 
+if(APPLE)
+    target_sources(Forge7 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Platform/MacAudioPermission.mm")
+else()
+    target_sources(Forge7 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Platform/MacAudioPermission.cpp")
+endif()
+
 target_include_directories(Forge7 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)
 
 target_link_libraries(Forge7 PRIVATE
@@ -56,6 +62,10 @@ target_link_libraries(Forge7 PRIVATE
     juce::juce_dsp
     juce::juce_gui_extra
 )
+
+if(APPLE)
+    target_link_libraries(Forge7 PRIVATE "-framework AVFoundation")
+endif()
 
 target_compile_definitions(Forge7 PRIVATE
     JUCE_WEB_BROWSER=0

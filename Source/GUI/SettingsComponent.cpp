@@ -6,6 +6,7 @@
 #include "../App/AppContext.h"
 #include "../Audio/AudioEngine.h"
 #include "../GUI/LevelMeter.h"
+#include "../Platform/MacAudioPermission.h"
 #include "../Utilities/Logger.h"
 
 namespace forge7
@@ -60,6 +61,27 @@ void styleMuted(juce::Label& l, const float fontH)
     l.setFont(juce::Font(fontH));
     l.setColour(juce::Label::textColourId, muted());
 }
+
+juce::String macMicStatusDisplayString(MacMicPermissionStatus s)
+{
+    switch (s)
+    {
+        case MacMicPermissionStatus::NotMac:
+            return "Not Mac";
+        case MacMicPermissionStatus::Unknown:
+            return "Unknown";
+        case MacMicPermissionStatus::NotDetermined:
+            return "Not Determined";
+        case MacMicPermissionStatus::Denied:
+            return "Denied";
+        case MacMicPermissionStatus::Restricted:
+            return "Restricted";
+        case MacMicPermissionStatus::Authorized:
+            return "Authorized";
+        default:
+            return "Unknown";
+    }
+}
 } // namespace
 
 SettingsComponent::SettingsComponent(AppContext& context, std::function<void()> onBack)
@@ -104,6 +126,100 @@ SettingsComponent::SettingsComponent(AppContext& context, std::function<void()> 
     saveStatusLabel.setFont(juce::Font(12.0f));
     saveStatusLabel.setColour(juce::Label::textColourId, muted());
     addAndMakeVisible(saveStatusLabel);
+
+    styleTopButton(requestMicPermissionButton);
+    requestMicPermissionButton.onClick = [this]()
+    {
+        forge7::requestMacMicPermission([](bool granted)
+                                        {
+                                            Logger::info("FORGE7 AudioIO: requestMacMicPermission completed, granted="
+                                                         + juce::String(granted ? "yes" : "no"));
+                                        });
+    };
+    addAndMakeVisible(requestMicPermissionButton);
+
+    styleTopButton(checkMicPermissionButton);
+    checkMicPermissionButton.onClick = [this]() { refreshStatus(); };
+    addAndMakeVisible(checkMicPermissionButton);
+
+    styleTopButton(runInputProbeButton);
+    runInputProbeButton.onClick = [this]()
+    {
+        if (appContext.audioEngine == nullptr)
+            return;
+        appContext.audioEngine->setInputProbeEnabled(true);
+        inputProbeToggle.setToggleState(true, juce::dontSendNotification);
+        Logger::info("FORGE7 AudioIO: Run Input Probe - input probe mode enabled");
+        refreshStatus();
+    };
+    addAndMakeVisible(runInputProbeButton);
+
+    inputProbeToggle.setColour(juce::ToggleButton::textColourId, text());
+    inputProbeToggle.setColour(juce::ToggleButton::tickColourId, accent());
+    inputProbeToggle.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    inputProbeToggle.setClickingTogglesState(true);
+    if (appContext.audioEngine != nullptr)
+        inputProbeToggle.setToggleState(appContext.audioEngine->isInputProbeEnabled(), juce::dontSendNotification);
+    inputProbeToggle.onClick = [this]()
+    {
+        if (appContext.audioEngine == nullptr)
+            return;
+        const bool on = inputProbeToggle.getToggleState();
+        appContext.audioEngine->setInputProbeEnabled(on);
+        Logger::info("FORGE7 AudioIO: input probe " + juce::String(on ? "enabled" : "disabled"));
+        refreshStatus();
+    };
+    addAndMakeVisible(inputProbeToggle);
+
+    inputSourceHeadingLabel.setText("Input Source:", juce::dontSendNotification);
+    styleMuted(inputSourceHeadingLabel, 12.0f);
+    addAndMakeVisible(inputSourceHeadingLabel);
+
+    inputSourceCombo.addItem("First non-null", 1);
+    inputSourceCombo.addItem("Channel 1", 2);
+    inputSourceCombo.addItem("Channel 2", 3);
+    inputSourceCombo.addItem("Mix all", 4);
+    inputSourceCombo.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    if (appContext.audioEngine != nullptr)
+    {
+        const auto m = appContext.audioEngine->getInputSourceMode();
+        inputSourceCombo.setSelectedId(static_cast<int>(m) + 1, juce::dontSendNotification);
+    }
+    else
+        inputSourceCombo.setSelectedId(2, juce::dontSendNotification);
+
+    inputSourceCombo.onChange = [this]()
+    {
+        if (appContext.audioEngine == nullptr)
+            return;
+        const int id = inputSourceCombo.getSelectedId();
+        if (id <= 0)
+            return;
+        appContext.audioEngine->setInputSourceMode(static_cast<InputSourceMode>(id - 1));
+        Logger::info("FORGE7 AudioIO: input source mode set to id=" + juce::String(id));
+        refreshStatus();
+    };
+    addAndMakeVisible(inputSourceCombo);
+
+    styleMuted(micPermissionStatusLabel, 12.0f);
+    addAndMakeVisible(micPermissionStatusLabel);
+
+    micDeniedHintLabel.setJustificationType(juce::Justification::topLeft);
+    micDeniedHintLabel.setFont(juce::Font(11.0f));
+    micDeniedHintLabel.setColour(juce::Label::textColourId, warn());
+    micDeniedHintLabel.setVisible(false);
+    addAndMakeVisible(micDeniedHintLabel);
+
+    for (auto* l : { &ch1RawPeakLabel, &ch2RawPeakLabel, &ch3RawPeakLabel, &ch4RawPeakLabel })
+    {
+        styleMuted(*l, 12.0f);
+        addAndMakeVisible(*l);
+    }
+
+    diagnosisLabel.setJustificationType(juce::Justification::topLeft);
+    diagnosisLabel.setFont(juce::Font(12.0f));
+    diagnosisLabel.setColour(juce::Label::textColourId, text());
+    addAndMakeVisible(diagnosisLabel);
 
     if (appContext.audioEngine != nullptr)
     {
@@ -246,6 +362,43 @@ void SettingsComponent::resized()
 
     area.removeFromTop(8);
 
+    auto diagArea = area.removeFromTop(254);
+    auto micRow = diagArea.removeFromTop(30);
+    requestMicPermissionButton.setBounds(micRow.removeFromLeft(168).reduced(0, 2));
+    micRow.removeFromLeft(8);
+    checkMicPermissionButton.setBounds(micRow.removeFromLeft(152).reduced(0, 2));
+    micRow.removeFromLeft(8);
+    runInputProbeButton.setBounds(micRow.removeFromLeft(130).reduced(0, 2));
+
+    diagArea.removeFromTop(6);
+    auto probeRow = diagArea.removeFromTop(28);
+    inputProbeToggle.setBounds(probeRow.removeFromLeft(240));
+
+    diagArea.removeFromTop(6);
+    auto srcRow = diagArea.removeFromTop(28);
+    inputSourceHeadingLabel.setBounds(srcRow.removeFromLeft(100));
+    srcRow.removeFromLeft(8);
+    inputSourceCombo.setBounds(srcRow.removeFromLeft(220).reduced(0, 2));
+
+    diagArea.removeFromTop(6);
+    micPermissionStatusLabel.setBounds(diagArea.removeFromTop(18));
+
+    diagArea.removeFromTop(4);
+    micDeniedHintLabel.setBounds(diagArea.removeFromTop(44));
+
+    diagArea.removeFromTop(4);
+    auto chRow = diagArea.removeFromTop(18);
+    const int chW = juce::jmax(80, chRow.getWidth() / 4);
+    ch1RawPeakLabel.setBounds(chRow.removeFromLeft(chW));
+    ch2RawPeakLabel.setBounds(chRow.removeFromLeft(chW));
+    ch3RawPeakLabel.setBounds(chRow.removeFromLeft(chW));
+    ch4RawPeakLabel.setBounds(chRow);
+
+    diagArea.removeFromTop(6);
+    diagnosisLabel.setBounds(diagArea);
+
+    area.removeFromTop(8);
+
     auto monitorRow = area.removeFromTop(28);
     inputMonitorToggle.setBounds(monitorRow.removeFromLeft(180));
     monitorRow.removeFromLeft(10);
@@ -337,6 +490,13 @@ void SettingsComponent::refreshStatus()
         bufferSizeLabel.setText("Buffer: -", juce::dontSendNotification);
         cpuLabel.setText("CPU: -", juce::dontSendNotification);
         callbackCountLabel.setText("Callbacks: -", juce::dontSendNotification);
+        micPermissionStatusLabel.setText("Mic permission status: -", juce::dontSendNotification);
+        micDeniedHintLabel.setVisible(false);
+        ch1RawPeakLabel.setText("Ch 1 raw peak: -", juce::dontSendNotification);
+        ch2RawPeakLabel.setText("Ch 2 raw peak: -", juce::dontSendNotification);
+        ch3RawPeakLabel.setText("Ch 3 raw peak: -", juce::dontSendNotification);
+        ch4RawPeakLabel.setText("Ch 4 raw peak: -", juce::dontSendNotification);
+        diagnosisLabel.setText("", juce::dontSendNotification);
         return;
     }
 
@@ -388,6 +548,28 @@ void SettingsComponent::refreshStatus()
     inputGainLabel.setText("Input gain (linear): " + juce::String(inGainV, 3), juce::dontSendNotification);
     rawInputPeakLabel.setText("Raw peak (pre-gain): " + juce::String(rawPk, 6), juce::dontSendNotification);
 
+    const float ch1r = engine->getInputChannelRawPeak(0);
+    const float ch2r = engine->getInputChannelRawPeak(1);
+    const float ch3r = engine->getInputChannelRawPeak(2);
+    const float ch4r = engine->getInputChannelRawPeak(3);
+    ch1RawPeakLabel.setText("Ch 1 raw peak: " + juce::String(ch1r, 6), juce::dontSendNotification);
+    ch2RawPeakLabel.setText("Ch 2 raw peak: " + juce::String(ch2r, 6), juce::dontSendNotification);
+    ch3RawPeakLabel.setText("Ch 3 raw peak: " + juce::String(ch3r, 6), juce::dontSendNotification);
+    ch4RawPeakLabel.setText("Ch 4 raw peak: " + juce::String(ch4r, 6), juce::dontSendNotification);
+
+    const auto micStatus = forge7::getMacMicPermissionStatus();
+    micPermissionStatusLabel.setText("Mic permission status: " + macMicStatusDisplayString(micStatus),
+                                     juce::dontSendNotification);
+
+    const bool isMac = (juce::SystemStats::getOperatingSystemType() == juce::SystemStats::MacOSX);
+    const bool micDeniedOnMac = isMac && micStatus == MacMicPermissionStatus::Denied;
+    micDeniedHintLabel.setVisible(micDeniedOnMac);
+    if (micDeniedOnMac)
+        micDeniedHintLabel.setText("Mic permission denied. Enable FORGE 7 in System Settings > Privacy & Security > Microphone.",
+                                   juce::dontSendNotification);
+    else
+        micDeniedHintLabel.setText("", juce::dontSendNotification);
+
     juce::String warnText;
     if (auto* dev = dm.getCurrentAudioDevice())
     {
@@ -404,16 +586,42 @@ void SettingsComponent::refreshStatus()
 
     if (! inputPresent)
         warnText += "No live input channel is reaching the audio callback.";
-    else if (inGainV <= 0.0001f)
+    else if (inGainV <= 0.0001f && ! engine->isInputProbeEnabled())
         warnText += "Input gain is zero inside the app.";
-    else if (inPeak <= 0.0001f && rawPk <= 0.0000001f)
+    else if (inPeak <= 0.0001f && rawPk <= 0.0000001f && ! engine->isInputProbeEnabled())
         warnText += "The driver is delivering silence on all enabled input channels (raw peak 0). Check interface "
                     "preamp gain, instrument vs line, cable, and macOS Microphone access for this app.";
-    else if (inPeak <= 0.0001f)
-        warnText += "Input channel present, but signal is silent after gain. If your guitar is on input 2, FORGE7 "
-                    "sums all enabled inputs; check macOS Microphone permission and interface gain.";
+    else if (inPeak <= 0.0001f && ! engine->isInputProbeEnabled())
+        warnText += "Input channel present, but signal is silent after gain. If your guitar is on input 2, try Input Source "
+                    "Channel 2 or Mix all; check macOS Microphone permission and interface gain.";
 
     inputWarningLabel.setText(warnText.trimEnd(), juce::dontSendNotification);
+
+    juce::String diagnosis;
+    constexpr float kPeakEpsilon = 1.0e-8f;
+    const bool allFourRawPeaksZero = (ch1r <= kPeakEpsilon && ch2r <= kPeakEpsilon && ch3r <= kPeakEpsilon
+                                      && ch4r <= kPeakEpsilon);
+
+    if (isMac && micStatus != MacMicPermissionStatus::Authorized)
+        diagnosis = "Diagnosis: macOS microphone permission is not authorized.";
+    else if (cbIn == 0)
+        diagnosis = "Diagnosis: JUCE callback is receiving zero input channels.";
+    else if (! inputPresent)
+        diagnosis = "Diagnosis: Input channel pointers are null.";
+    else if (allFourRawPeaksZero)
+        diagnosis = "Diagnosis: Input stream is open, but CoreAudio is delivering silence.";
+    else
+        diagnosis = "Diagnosis: Input signal is reaching FORGE7.";
+
+    diagnosisLabel.setText(diagnosis, juce::dontSendNotification);
+
+    const int sourceComboId = static_cast<int>(engine->getInputSourceMode()) + 1;
+    if (inputSourceCombo.getSelectedId() != sourceComboId)
+        inputSourceCombo.setSelectedId(sourceComboId, juce::dontSendNotification);
+
+    const bool probeOn = engine->isInputProbeEnabled();
+    inputProbeToggle.setToggleState(probeOn, juce::dontSendNotification);
+    inputProbeToggle.setButtonText(probeOn ? "Input Probe: ON" : "Input Probe: OFF");
 
     sampleRateLabel.setText("Sample rate: " + juce::String(engine->getCurrentSampleRate(), 1) + " Hz",
                             juce::dontSendNotification);
@@ -451,6 +659,11 @@ void SettingsComponent::refreshStatus()
         d->setProperty("inputPeak", inPeak);
         d->setProperty("outputPeak", engine->getSmoothedOutputPeak());
         d->setProperty("monitorEnabled", engine->isInputMonitorEnabled());
+        d->setProperty("inputProbe", engine->isInputProbeEnabled());
+        d->setProperty("inputSourceMode", (int) engine->getInputSourceMode());
+        d->setProperty("ch1RawPeak", ch1r);
+        d->setProperty("ch2RawPeak", ch2r);
+        d->setProperty("macMicPermission", (int) micStatus);
         d->setProperty("globalBypass", engine->isGlobalBypass());
         d->setProperty("callbackInvocationCount",
                        (juce::int64) engine->getAudioCallbackInvocationCount());
