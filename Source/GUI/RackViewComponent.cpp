@@ -335,7 +335,6 @@ RackViewComponent::RackViewComponent(AppContext& context)
     wireCtxText(ctxRemoveButton);
     wireCtxText(ctxReplaceButton);
     wireCtxText(ctxEditorButton);
-    wireCtxText(ctxDetailButton);
 
     ctxRemoveButton.onClick = [this]()
     {
@@ -371,23 +370,6 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
         if (auto* main = findParentComponentOfClass<MainComponent>())
             main->openFullscreenPluginEditor(selectedSlotIndex);
-    };
-
-    ctxDetailButton.onClick = [this]()
-    {
-        inspectorExpanded = !inspectorExpanded;
-
-        if (chainControlsPanel != nullptr)
-        {
-            chainControlsPanel->setVisible(inspectorExpanded);
-            ctxDetailButton.setButtonText(inspectorExpanded ? "Hide" : "Controls");
-
-            if (inspectorExpanded)
-                chainControlsPanel->refreshFromHost();
-        }
-
-        resized();
-        syncEncoderFocus();
     };
 
     ctxMoveLeftButton.onClick = [this]()
@@ -474,8 +456,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
     pluginBrowser->toFront(false);
 
     chainControlsPanel = std::make_unique<ChainControlsPanelComponent>(appContext);
-    chainControlsPanel->setVisible(false);
-    addChildComponent(*chainControlsPanel);
+    addAndMakeVisible(*chainControlsPanel);
 
     startTimerHz(4);
 }
@@ -575,8 +556,6 @@ void RackViewComponent::resized()
     auto ctxRow = area.removeFromBottom(contextH).reduced(pad, 2);
     const int ctxGap = 6;
 
-    ctxDetailButton.setBounds(ctxRow.removeFromRight(92).reduced(0, 2));
-    ctxRow.removeFromRight(ctxGap);
     ctxEditorButton.setBounds(ctxRow.removeFromRight(92).reduced(0, 2));
     ctxRow.removeFromRight(ctxGap);
     ctxReplaceButton.setBounds(ctxRow.removeFromRight(100).reduced(0, 2));
@@ -591,15 +570,15 @@ void RackViewComponent::resized()
 
     area.removeFromBottom(4);
 
-    const int inspectorH = inspectorExpanded ? juce::jlimit(140, 240, juce::roundToInt(0.30f * (float)getHeight()))
-                                             : 0;
+    constexpr int controlsBarH = 92;
 
-    if (inspectorExpanded && chainControlsPanel != nullptr)
-        chainControlsPanel->setBounds(area.removeFromBottom(inspectorH).reduced(pad, 0));
-    else if (chainControlsPanel != nullptr)
-        chainControlsPanel->setBounds({});
+    if (chainControlsPanel != nullptr)
+    {
+        chainControlsPanel->setVisible(true);
+        chainControlsPanel->setBounds(area.removeFromBottom(controlsBarH).reduced(pad, 0));
+    }
 
-    area.removeFromBottom(inspectorExpanded ? 4 : 0);
+    area.removeFromBottom(4);
 
     // Chain region: fixed INPUT (left), fixed OUTPUT (right), center lane for visible plugins + Add card.
     const int ioW = 100;
@@ -830,7 +809,7 @@ void RackViewComponent::refreshSlotDisplays()
         slotCards[static_cast<size_t>(i)]->setSelected(selectedSlotIndex == i);
     }
 
-    if (chainControlsPanel != nullptr && inspectorExpanded)
+    if (chainControlsPanel != nullptr)
         chainControlsPanel->refreshFromHost();
 
     // Context strip (selection-dependent labels / toggles)
@@ -860,8 +839,6 @@ void RackViewComponent::refreshSlotDisplays()
     ctxRemoveButton.setEnabled(hasBlock);
     ctxReplaceButton.setEnabled(haveSlot);
     ctxEditorButton.setEnabled(hasBlock);
-    ctxDetailButton.setEnabled(nav.hasActiveChain());
-
     if (haveSlot)
         ctxReplaceButton.setButtonText((ctxInfo.isEmpty && !ctxInfo.missingPlugin) ? "Add" : "Replace");
     else
@@ -1107,7 +1084,6 @@ void RackViewComponent::syncEncoderFocus()
     items.push_back({ &ctxRemoveButton, [this]() { ctxRemoveButton.triggerClick(); }, {} });
     items.push_back({ &ctxReplaceButton, [this]() { ctxReplaceButton.triggerClick(); }, {} });
     items.push_back({ &ctxEditorButton, [this]() { ctxEditorButton.triggerClick(); }, {} });
-    items.push_back({ &ctxDetailButton, [this]() { ctxDetailButton.triggerClick(); }, {} });
     items.push_back({ &globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, {} });
     items.push_back({ &navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, {} });
     items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });

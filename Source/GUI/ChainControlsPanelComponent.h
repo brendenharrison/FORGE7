@@ -5,19 +5,17 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
-#include "../Controls/HardwareControlTypes.h"
-
 namespace forge7
 {
 
 struct AppContext;
 
-/** Rack/Edit details panel: read-only reference of the active Chain's control assignments.
+/** Rack/Edit: always-visible read-only strip of K1-K4 + Button 1 / Button 2 assignments.
 
-    Shows K1-K4 plus Button 1 / Button 2 mappings for the active Scene/Chain and the loaded plugin
-    parameter values. Includes a compact flat strip plus detail cards; touch-friendly; message thread only. */
+    Scene/chain context comes from the rack header; this panel only shows the hardware mapping summary.
+    Message thread only; does not write parameters. */
 class ChainControlsPanelComponent final : public juce::Component,
-                                         private juce::Timer
+                                          private juce::Timer
 {
 public:
     explicit ChainControlsPanelComponent(AppContext& context);
@@ -26,27 +24,21 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
-    /** Safe to call after chain/project hydration or mapping edits. */
+    /** Safe after chain/project/mapping changes. */
     void refreshFromHost();
 
 private:
     void timerCallback() override;
-    void rebuildHeaderText();
-    void refreshCardsFromHost();
+    void refreshStripFromHost();
 
     AppContext& appContext;
 
     juce::Label headingLabel;
-    juce::Label sceneLabel;
-    juce::Label chainLabel;
 
-    /** K1-K4 | Button 1 | Button 2 horizontal summary strip. */
+    /** K1-K4 | Button 1 | Button 2 */
     std::array<std::unique_ptr<juce::Component>, 6> stripCells {};
-
-    std::array<std::unique_ptr<juce::Component>, 6> cards {};
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(ChainControlsPanelComponent)
 };
 
 } // namespace forge7
-

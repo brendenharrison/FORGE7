@@ -18,9 +18,9 @@ struct AppContext;
 class PluginBrowserComponent;
 class ChainControlsPanelComponent;
 
-/** Edit Mode ("Rack"): status bar, dominant horizontal chain, optional collapsible inspector,
+/** Edit Mode ("Rack"): status bar, chain lane, always-visible control assignments strip, slot context strip,
 
-    slot context strip, fullscreen in-app plugin browser. Touch-first ~7". Message thread only. */
+    fullscreen in-app plugin browser. Touch-first ~7". Message thread only. */
 class RackViewComponent final : public juce::Component,
                                 private juce::Timer
 {
@@ -150,7 +150,6 @@ private:
     juce::TextButton ctxRemoveButton { "Remove" };
     juce::TextButton ctxReplaceButton { "Replace" };
     juce::TextButton ctxEditorButton { "Editor" };
-    juce::TextButton ctxDetailButton { "Controls" };
 
     juce::TextButton navPerformanceButton;
     juce::TextButton settingsButton { "Settings" };
@@ -158,8 +157,6 @@ private:
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     juce::TextButton simHwButton { "Sim HW" };
 #endif
-
-    bool inspectorExpanded { false };
 
     std::unique_ptr<juce::Component> browserOverlay;
     std::unique_ptr<PluginBrowserComponent> pluginBrowser;
