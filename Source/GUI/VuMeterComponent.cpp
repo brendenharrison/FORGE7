@@ -76,10 +76,13 @@ void VuMeterComponent::paint(juce::Graphics& g)
 {
     auto full = getLocalBounds().toFloat();
     const float captionH = caption.isNotEmpty() ? 11.0f : 0.0f;
-    auto work = full;
+    juce::Rectangle<float> captionArea;
 
+    // removeFromBottom returns the *removed* strip and shrinks `full`; meter bars use the remainder.
     if (captionH > 0.0f)
-        work = full.removeFromBottom(captionH);
+        captionArea = full.removeFromBottom(captionH);
+
+    const auto work = full;
 
     const uint32_t now = juce::Time::getApproximateMillisecondCounter();
     const bool clipLit = now < clipHoldUntilMs;
@@ -151,16 +154,16 @@ void VuMeterComponent::paint(juce::Graphics& g)
         if (clipLit)
         {
             g.setColour(juce::Colours::red);
-            g.fillEllipse(full.removeFromRight(7.0f).removeFromTop(7.0f).toNearestIntEdges().toFloat());
+            auto clipZone = work;
+            g.fillEllipse(clipZone.removeFromRight(7.0f).removeFromTop(7.0f).toNearestIntEdges().toFloat());
         }
     }
 
-    if (caption.isNotEmpty())
+    if (caption.isNotEmpty() && captionArea.getWidth() > 0.0f && captionArea.getHeight() > 0.0f)
     {
         g.setColour(juce::Colours::white.withAlpha(0.55f));
         g.setFont(juce::Font(9.0f));
-        g.drawText(caption, getLocalBounds().removeFromBottom(static_cast<int>(captionH)), juce::Justification::centred,
-                   false);
+        g.drawText(caption, captionArea.toNearestIntEdges(), juce::Justification::centred, false);
     }
 }
 
