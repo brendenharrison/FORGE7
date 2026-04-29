@@ -250,6 +250,16 @@ ProjectSerializer::ProjectSerializer(SceneManager& scenes,
 
 ProjectSerializer::~ProjectSerializer() = default;
 
+void ProjectSerializer::captureActiveChainFromLiveHost(PluginHostManager& host)
+{
+    syncActiveVariationFromLiveHost(host);
+}
+
+void ProjectSerializer::hydrateActiveChainIntoHost(PluginHostManager& host)
+{
+    hydrateActiveVariationIntoHost(host);
+}
+
 void ProjectSerializer::syncActiveVariationFromLiveHost(PluginHostManager& host)
 {
     auto* scene = sceneManager.getActiveScene();

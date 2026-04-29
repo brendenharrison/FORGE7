@@ -44,7 +44,8 @@ public:
     static void showSaveDialog(AppContext& appContext,
                                const juce::String& title,
                                const juce::String& initialText,
-                               SaveAttemptHandler trySave);
+                               SaveAttemptHandler trySave,
+                               std::function<void()> onSaveSuccess = {});
 
     /** Simple name entry: Save calls onConfirm(trimmed text); no replace UI. */
     static void showPlainDialog(AppContext& appContext,
@@ -70,6 +71,7 @@ private:
 
     bool plainMode = false;
     SaveAttemptHandler saveAttempt;
+    std::function<void()> onSaveSuccess;
     std::function<void(const juce::String&)> onPlainConfirm;
     std::function<void()> onPlainCancel;
 

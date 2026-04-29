@@ -42,6 +42,9 @@ public:
 
     RackViewComponent* getRackView() noexcept { return rackView.get(); }
 
+    /** After chain/scene/project-state changes: Performance HUD + Rack slots/mappings. Message thread. */
+    void refreshProjectDependentViews();
+
     /** Simulated hardware dev panel shortcuts (message thread). */
     void openPluginBrowserFromDevTools();
     void focusPluginInspectorFromDevTools();

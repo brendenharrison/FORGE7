@@ -42,6 +42,15 @@ juce::String NavigationStatus::getChainCountSummary() const
            + formatChainIndex1Based(chainCount);
 }
 
+juce::String NavigationStatus::getSceneCountSummary() const
+{
+    if (sceneCount <= 0 || sceneIndex < 0 || sceneIndex >= sceneCount)
+        return "-";
+
+    return "Scene " + formatChainIndex1Based(sceneIndex + 1) + " / "
+           + formatChainIndex1Based(sceneCount);
+}
+
 juce::String NavigationStatus::getProjectHeaderLine() const
 {
     if (projectName.isEmpty())

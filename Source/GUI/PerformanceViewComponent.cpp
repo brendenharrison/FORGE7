@@ -18,6 +18,7 @@
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
 #include "../Utilities/Logger.h"
+#include "../App/ProjectSession.h"
 #include "NavigationStatus.h"
 
 namespace forge7
@@ -160,6 +161,8 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
       audioHealthMonitor(appContext.audioEngine)
 {
     styleToolbarButton(rackEditButton);
+    styleToolbarButton(scenePrevButton);
+    styleToolbarButton(sceneNextButton);
     styleToolbarButton(chainPrevButton);
     styleToolbarButton(chainNextButton);
     styleToolbarButton(settingsButton);
@@ -186,14 +189,44 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
             main->setEditMode(true);
     };
 
-    chainPrevButton.onClick = [this]()
+    scenePrevButton.onClick = [this]()
     {
-        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+        if (appContext.projectSession == nullptr)
             return;
 
-        const int before = appContext.sceneManager->getActiveChainVariationIndex();
-        appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
-        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveSceneIndex() : -1;
+        appContext.projectSession->previousScene();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveSceneIndex() : -1;
+
+        if (appContext.sceneManager != nullptr && appContext.sceneManager->getScenes().size() > 1u)
+            if (before == 0 && after != 0)
+                Logger::info("FORGE7: Scene - wrapped from first to last");
+    };
+
+    sceneNextButton.onClick = [this]()
+    {
+        if (appContext.projectSession == nullptr)
+            return;
+
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveSceneIndex() : -1;
+        appContext.projectSession->nextScene();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveSceneIndex() : -1;
+
+        if (appContext.sceneManager != nullptr && appContext.sceneManager->getScenes().size() > 1u)
+            if (after == 0 && before != 0)
+                Logger::info("FORGE7: Scene + wrapped from last to first");
+    };
+
+    chainPrevButton.onClick = [this]()
+    {
+        if (appContext.projectSession == nullptr)
+            return;
+
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                                : -1;
+        appContext.projectSession->previousChain();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                             : -1;
 
         if (before == 0 && after != 0)
             Logger::info("FORGE7: Chain - wrapped from first to last");
@@ -201,12 +234,14 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
 
     chainNextButton.onClick = [this]()
     {
-        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+        if (appContext.projectSession == nullptr)
             return;
 
-        const int before = appContext.sceneManager->getActiveChainVariationIndex();
-        appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
-        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                                : -1;
+        appContext.projectSession->nextChain();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                             : -1;
 
         if (after == 0 && before != 0)
             Logger::info("FORGE7: Chain + wrapped from last to first");
@@ -219,6 +254,12 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     };
 
     addAndMakeVisible(rackEditButton);
+    addAndMakeVisible(scenePrevButton);
+    addAndMakeVisible(sceneNextButton);
+    sceneCountLabel.setJustificationType(juce::Justification::centred);
+    sceneCountLabel.setFont(juce::Font(15.0f));
+    sceneCountLabel.setColour(juce::Label::textColourId, perfMuted());
+    addAndMakeVisible(sceneCountLabel);
     addAndMakeVisible(chainPrevButton);
     addAndMakeVisible(chainNextButton);
     addAndMakeVisible(settingsButton);
@@ -233,6 +274,12 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
     projectNameLabel.setColour(juce::Label::textColourId, perfMuted());
     projectNameLabel.setMinimumHorizontalScale(0.75f);
     addAndMakeVisible(projectNameLabel);
+
+    projectDirtyLabel.setJustificationType(juce::Justification::centredLeft);
+    projectDirtyLabel.setFont(juce::Font(12.0f));
+    projectDirtyLabel.setColour(juce::Label::textColourId, juce::Colour(0xffffb74d));
+    projectDirtyLabel.setMinimumHorizontalScale(0.75f);
+    addAndMakeVisible(projectDirtyLabel);
 
     heroSceneLabel.setJustificationType(juce::Justification::centredLeft);
     heroSceneLabel.setFont(juce::Font(34.0f));
@@ -300,6 +347,8 @@ void PerformanceViewComponent::syncEncoderFocus()
     std::vector<EncoderFocusItem> items;
 
     items.push_back({ &rackEditButton, [this]() { rackEditButton.triggerClick(); }, {} });
+    items.push_back({ &scenePrevButton, [this]() { scenePrevButton.triggerClick(); }, {} });
+    items.push_back({ &sceneNextButton, [this]() { sceneNextButton.triggerClick(); }, {} });
     items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
     items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });
 
@@ -332,6 +381,11 @@ void PerformanceViewComponent::refreshHud()
 
     if (appContext.sceneManager != nullptr)
     {
+        const bool multiScene = nav.sceneCount > 1;
+        scenePrevButton.setEnabled(multiScene);
+        sceneNextButton.setEnabled(multiScene);
+        sceneCountLabel.setText(nav.getSceneCountSummary(), juce::dontSendNotification);
+
         chainPrevButton.setEnabled(nav.chainCount > 0);
         chainNextButton.setEnabled(nav.chainCount > 0);
 
@@ -361,8 +415,22 @@ void PerformanceViewComponent::refreshHud()
     }
     else
     {
+        scenePrevButton.setEnabled(false);
+        sceneNextButton.setEnabled(false);
+        sceneCountLabel.setText("-", juce::dontSendNotification);
         chainPrevButton.setEnabled(false);
         chainNextButton.setEnabled(false);
+    }
+
+    if (appContext.projectSession != nullptr && appContext.projectSession->isProjectDirty())
+    {
+        projectDirtyLabel.setText("Unsaved changes", juce::dontSendNotification);
+        projectDirtyLabel.setVisible(true);
+    }
+    else
+    {
+        projectDirtyLabel.setText({}, juce::dontSendNotification);
+        projectDirtyLabel.setVisible(false);
     }
 
     projectNameLabel.setText(nav.getProjectHeaderLine(), juce::dontSendNotification);
@@ -444,10 +512,22 @@ void PerformanceViewComponent::resized()
     r.reduce(14, 10);
 
     projectNameLabel.setBounds(r.removeFromTop(18));
+    r.removeFromTop(1);
+    projectDirtyLabel.setBounds(r.removeFromTop(16));
     r.removeFromTop(2);
-    heroSceneLabel.setBounds(r.removeFromTop(52));
+    heroSceneLabel.setBounds(r.removeFromTop(48));
     r.removeFromTop(4);
-    chainHeaderLabel.setBounds(r.removeFromTop(34));
+
+    auto sceneRow = r.removeFromTop(40);
+    const int sceneBtnW = juce::jmin(88, sceneRow.getWidth() / 7);
+    scenePrevButton.setBounds(sceneRow.removeFromLeft(sceneBtnW).reduced(0, 4));
+    sceneRow.removeFromLeft(6);
+    sceneNextButton.setBounds(sceneRow.removeFromRight(sceneBtnW).reduced(0, 4));
+    sceneRow.removeFromRight(6);
+    sceneCountLabel.setBounds(sceneRow.reduced(4, 6));
+
+    r.removeFromTop(4);
+    chainHeaderLabel.setBounds(r.removeFromTop(32));
 
     auto chainRow = r.removeFromTop(44);
     const int chainBtnW = juce::jmin(96, chainRow.getWidth() / 6);

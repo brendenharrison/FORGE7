@@ -19,6 +19,7 @@ class ParameterMappingManager;
 class AppConfig;
 class EncoderNavigator;
 class MainComponent;
+class ProjectSession;
 
 /** Non-owning bundle of core subsystems. Created once in ForgeApplication and passed
     to MainComponent so the GUI can dispatch editing, performance mode, and file I/O
@@ -39,6 +40,9 @@ struct AppContext
 
     /** Root shell - set by `MainComponent` for dev tools / simulated hardware UI. Message thread only. */
     MainComponent* mainComponent = nullptr;
+
+    /** Coordinates model capture/hydration, navigation, and unsaved state (message thread). */
+    ProjectSession* projectSession = nullptr;
 
     /** Desktop dev-only: raise/reopen the simulated hardware window (if enabled). */
     std::function<void()> showSimulatedHardwareWindow;

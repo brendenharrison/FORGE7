@@ -29,13 +29,18 @@ public:
     /** Rebuild hardware encoder focus ring targets. */
     void syncEncoderFocus();
 
+    /** Full HUD refresh (project/scene/chain + knobs); safe from `MainComponent`. */
+    void refreshHud();
+
 private:
     void timerCallback() override;
-    void refreshHud();
 
     AppContext& appContext;
 
     juce::TextButton rackEditButton { "RACK" };
+    juce::TextButton scenePrevButton { "Scene -" };
+    juce::TextButton sceneNextButton { "Scene +" };
+    juce::Label sceneCountLabel;
     juce::TextButton chainPrevButton { "Chain -" };
     juce::TextButton chainNextButton { "Chain +" };
     juce::TextButton settingsButton { "Settings" };
@@ -49,6 +54,7 @@ private:
     CpuMeter cpuMeter;
 
     juce::Label projectNameLabel;
+    juce::Label projectDirtyLabel;
     juce::Label heroSceneLabel;
     juce::Label chainHeaderLabel;
     juce::Label chainCountLabel;

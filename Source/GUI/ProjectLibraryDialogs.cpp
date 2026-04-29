@@ -5,8 +5,10 @@
 #include "../App/AppConfig.h"
 #include "../App/AppContext.h"
 #include "../App/MainComponent.h"
+#include "../App/ProjectSession.h"
 #include "../GUI/NameEntryModal.h"
 #include "../GUI/RackViewComponent.h"
+#include "../GUI/UnsavedChangesModal.h"
 #include "../Storage/ForgeStoragePaths.h"
 #include "../Storage/ProjectSerializer.h"
 #include "../Utilities/Logger.h"
@@ -26,8 +28,11 @@ void finishSuccessfulProjectLoad(AppContext& appContext, const juce::File& f)
         appContext.appConfig->saveToFile();
     }
 
-    if (appContext.mainComponent != nullptr && appContext.mainComponent->getRackView() != nullptr)
-        appContext.mainComponent->getRackView()->refreshAfterProjectHydration();
+    if (appContext.mainComponent != nullptr)
+        appContext.mainComponent->refreshProjectDependentViews();
+
+    if (appContext.projectSession != nullptr)
+        appContext.projectSession->clearProjectDirtyAfterSave();
 }
 
 void copyToLastSessionBackup(const juce::File& primarySavedFile)
@@ -52,11 +57,42 @@ void showSimpleAlert(juce::Component* associatedComponent, const juce::String& t
                                            nullptr);
 }
 
+bool loadProjectFileIntoCurrentSession(juce::Component* modalParent,
+                                      AppContext& appContext,
+                                      const juce::File& f,
+                                      std::function<void(const juce::String&)> statusMessage)
+{
+    if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
+        return false;
+
+    const auto r = appContext.projectSerializer->loadProjectFromFile(f,
+                                                                       appContext.pluginHostManager,
+                                                                       appContext.audioEngine);
+
+    if (r.failed())
+    {
+        Logger::warn("FORGE7: load project failed - " + r.getErrorMessage());
+        showSimpleAlert(modalParent,
+                        "Load failed",
+                        r.getErrorMessage().isNotEmpty() ? r.getErrorMessage() : juce::String("Unknown error."));
+        return false;
+    }
+
+    finishSuccessfulProjectLoad(appContext, f);
+    Logger::info("FORGE7: loaded project - " + f.getFullPathName());
+
+    if (statusMessage)
+        statusMessage("Loaded: " + f.getFileNameWithoutExtension());
+
+    return true;
+}
+
 } // namespace
 
 void runSaveProjectToLibraryDialog(juce::Component* modalParent,
                                    AppContext& appContext,
-                                   std::function<void(const juce::String&)> statusMessage)
+                                   std::function<void(const juce::String&)> statusMessage,
+                                   std::function<void()> onSavedSuccessfully)
 {
     juce::ignoreUnused(modalParent);
 
@@ -108,6 +144,9 @@ void runSaveProjectToLibraryDialog(juce::Component* modalParent,
                 return NameEntrySaveOutcome::Failed;
             }
 
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->clearProjectDirtyAfterSave();
+
             copyToLastSessionBackup(target);
 
             if (appContext.appConfig != nullptr)
@@ -122,12 +161,53 @@ void runSaveProjectToLibraryDialog(juce::Component* modalParent,
                 statusMessage("Saved: " + safeName);
 
             return NameEntrySaveOutcome::Success;
-        });
+        },
+        std::move(onSavedSuccessfully));
 }
 
+namespace
+{
+
+void openOrReplaceProjectFromFile(juce::Component* modalParent,
+                                  AppContext& appContext,
+                                  const juce::File& f,
+                                  std::function<void(const juce::String&)> statusMessage)
+{
+    if (appContext.projectSession != nullptr && appContext.projectSession->isProjectDirty())
+    {
+        UnsavedChangesModal::show(
+            appContext,
+            [modalParent, f, &appContext, statusMessage](UnsavedProjectChoice choice)
+            {
+                if (choice == UnsavedProjectChoice::Cancel)
+                    return;
+
+                if (choice == UnsavedProjectChoice::Discard)
+                {
+                    loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+                    return;
+                }
+
+                runSaveProjectToLibraryDialog(
+                    modalParent,
+                    appContext,
+                    statusMessage,
+                    [modalParent, f, &appContext, statusMessage]()
+                    {
+                        loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+                    });
+            });
+        return;
+    }
+
+    loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+}
+
+} // namespace
+
 void runLoadProjectFromLibraryBrowser(juce::Component* modalParent,
-                                       AppContext& appContext,
-                                       std::function<void(const juce::String&)> statusMessage)
+                                      AppContext& appContext,
+                                      std::function<void(const juce::String&)> statusMessage)
 {
     if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
         return;
@@ -166,26 +246,7 @@ void runLoadProjectFromLibraryBrowser(juce::Component* modalParent,
             return;
 
         const juce::File f = files.getReference(idx);
-
-        const auto r = appContext.projectSerializer->loadProjectFromFile(f,
-                                                                           appContext.pluginHostManager,
-                                                                           appContext.audioEngine);
-
-        if (r.failed())
-        {
-            Logger::warn("FORGE7: load project failed - " + r.getErrorMessage());
-            showSimpleAlert(modalParent,
-                            "Load failed",
-                            r.getErrorMessage().isNotEmpty() ? r.getErrorMessage()
-                                                             : juce::String("Unknown error."));
-            return;
-        }
-
-        finishSuccessfulProjectLoad(appContext, f);
-        Logger::info("FORGE7: loaded project from library - " + f.getFullPathName());
-
-        if (statusMessage)
-            statusMessage("Loaded: " + f.getFileNameWithoutExtension());
+        openOrReplaceProjectFromFile(modalParent, appContext, f, std::move(statusMessage));
     }
 }
 
@@ -216,13 +277,18 @@ void runExportProjectWithFileChooser(juce::Component* modalParent, AppContext& a
                                  return;
 
                              const auto r = ctx->projectSerializer->saveProjectToFile(f,
-                                                                                      ctx->pluginHostManager,
-                                                                                      ctx->audioEngine);
+                                                                                        ctx->pluginHostManager,
+                                                                                        ctx->audioEngine);
 
                              if (r.failed())
                                  Logger::warn("FORGE7: export failed - " + r.getErrorMessage());
                              else
+                             {
+                                 if (ctx->projectSession != nullptr)
+                                     ctx->projectSession->clearProjectDirtyAfterSave();
+
                                  Logger::info("FORGE7: exported project - " + f.getFullPathName());
+                             }
                          });
 }
 
@@ -236,29 +302,18 @@ void runImportProjectWithFileChooser(juce::Component* modalParent, AppContext& a
     AppContext* ctx = &appContext;
 
     auto chooser = std::make_shared<juce::FileChooser>("Import FORGE 7 project",
-                                                        juce::File {},
-                                                        "*.forgeproject;*.forge7.json");
+                                                       juce::File {},
+                                                       "*.forgeproject;*.forge7.json");
 
     chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                         [chooser, ctx](const juce::FileChooser& fc)
+                         [chooser, ctx, modalParent](const juce::FileChooser& fc)
                          {
                              const juce::File f = fc.getResult();
 
                              if (f == juce::File {} || ctx == nullptr || ctx->projectSerializer == nullptr)
                                  return;
 
-                             const auto r = ctx->projectSerializer->loadProjectFromFile(f,
-                                                                                      ctx->pluginHostManager,
-                                                                                      ctx->audioEngine);
-
-                             if (r.failed())
-                             {
-                                 Logger::warn("FORGE7: import failed - " + r.getErrorMessage());
-                                 return;
-                             }
-
-                             finishSuccessfulProjectLoad(*ctx, f);
-                             Logger::info("FORGE7: imported project - " + f.getFullPathName());
+                             openOrReplaceProjectFromFile(modalParent, *ctx, f, {});
                          });
 }
 

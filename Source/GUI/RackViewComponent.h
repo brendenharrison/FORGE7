@@ -94,6 +94,7 @@ private:
     BrowserOpenReason browserOpenReason { BrowserOpenReason::None };
 
     juce::Label projectHeaderLabel;
+    juce::Label projectDirtyLabel;
     juce::Label sceneTitleLabel;
     juce::Label chainHeaderLabel;
     juce::Label editModeBadge;

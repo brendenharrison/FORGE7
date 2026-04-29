@@ -11,6 +11,7 @@
 #include "../Audio/AudioEngine.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../PluginHost/PluginSlot.h"
+#include "../App/ProjectSession.h"
 #include "../Scene/ChainVariation.h"
 #include "../Scene/SceneManager.h"
 #include "../Utilities/Logger.h"
@@ -114,6 +115,12 @@ RackViewComponent::RackViewComponent(AppContext& context)
     projectHeaderLabel.setMinimumHorizontalScale(0.75f);
     addAndMakeVisible(projectHeaderLabel);
 
+    projectDirtyLabel.setJustificationType(juce::Justification::centredLeft);
+    projectDirtyLabel.setFont(juce::Font(11.0f));
+    projectDirtyLabel.setColour(juce::Label::textColourId, juce::Colour(0xffffb74d));
+    projectDirtyLabel.setMinimumHorizontalScale(0.75f);
+    addAndMakeVisible(projectDirtyLabel);
+
     sceneTitleLabel.setJustificationType(juce::Justification::centredLeft);
     sceneTitleLabel.setFont(juce::Font(17.0f));
     sceneTitleLabel.setColour(juce::Label::textColourId, rackText());
@@ -146,12 +153,14 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
     chainPrevButton.onClick = [this]()
     {
-        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+        if (appContext.projectSession == nullptr)
             return;
 
-        const int before = appContext.sceneManager->getActiveChainVariationIndex();
-        appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
-        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                              : -1;
+        appContext.projectSession->previousChain();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                             : -1;
 
         if (before == 0 && after != 0)
             Logger::info("FORGE7: Chain - wrapped from first to last");
@@ -161,12 +170,14 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
     chainNextButton.onClick = [this]()
     {
-        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+        if (appContext.projectSession == nullptr)
             return;
 
-        const int before = appContext.sceneManager->getActiveChainVariationIndex();
-        appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
-        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                                : -1;
+        appContext.projectSession->nextChain();
+        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
+                                                             : -1;
 
         if (after == 0 && before != 0)
             Logger::info("FORGE7: Chain + wrapped from last to first");
@@ -207,6 +218,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
     {
         if (appContext.audioEngine != nullptr)
             appContext.audioEngine->setGlobalBypass(globalBypassFxToggle.getToggleState());
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
     };
 
     globalBypassFxToggle.setColour(juce::ToggleButton::textColourId, rackText());
@@ -310,6 +324,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
         if (auto* c = appContext.pluginHostManager->getPluginChain())
             c->bypassSlot(selectedSlotIndex, ctxBypassToggle.getToggleState());
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
     };
     addAndMakeVisible(ctxBypassToggle);
 
@@ -327,6 +344,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
         if (auto* c = appContext.pluginHostManager->getPluginChain())
             c->removePluginFromSlot(selectedSlotIndex);
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
 
         refreshSlotDisplays();
     };
@@ -380,6 +400,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
                 setSelectedSlot(from - 1);
         }
 
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
+
         refreshSlotDisplays();
     };
 
@@ -396,6 +419,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
             if (c->moveSlot(from, from + 1))
                 setSelectedSlot(from + 1);
         }
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
 
         refreshSlotDisplays();
     };
@@ -475,7 +501,7 @@ void RackViewComponent::resized()
 {
     auto area = getLocalBounds();
 
-    const int projectStripH = 18;
+    const int projectStripH = 34;
     const int statusH = 52;
     const int chainNavH = 44;
     const int contextH = 50;
@@ -484,7 +510,8 @@ void RackViewComponent::resized()
 
     // Project header strip (small).
     auto projectStrip = area.removeFromTop(projectStripH).reduced(pad, 0);
-    projectHeaderLabel.setBounds(projectStrip);
+    projectHeaderLabel.setBounds(projectStrip.removeFromTop(18));
+    projectDirtyLabel.setBounds(projectStrip);
 
     // Top: scene title / chain / edit badge / tempo / global bypass / CPU
     auto statusArea = area.removeFromTop(statusH).reduced(pad, 4);
@@ -770,6 +797,18 @@ void RackViewComponent::refreshSlotDisplays()
         nav.hasActiveScene() ? juce::String(nav.tempoBpm, 1) + " BPM" : juce::String("- BPM");
 
     projectHeaderLabel.setText(nav.getProjectHeaderLine(), juce::dontSendNotification);
+
+    if (appContext.projectSession != nullptr && appContext.projectSession->isProjectDirty())
+    {
+        projectDirtyLabel.setText("Unsaved changes", juce::dontSendNotification);
+        projectDirtyLabel.setVisible(true);
+    }
+    else
+    {
+        projectDirtyLabel.setText({}, juce::dontSendNotification);
+        projectDirtyLabel.setVisible(false);
+    }
+
     sceneTitleLabel.setText(sceneLine, juce::dontSendNotification);
     chainHeaderLabel.setText(nav.getChainDisplayLabel(), juce::dontSendNotification);
     chainCountLabel.setText(nav.getChainCountSummary(), juce::dontSendNotification);
@@ -854,6 +893,9 @@ void RackViewComponent::wireSlotCallbacks(const int slotIndex)
 
         if (auto* c = appContext.pluginHostManager->getPluginChain())
             c->bypassSlot(idx, bypassed);
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
     };
 
     card.onRemoveRequested = [this](int idx)
@@ -863,6 +905,9 @@ void RackViewComponent::wireSlotCallbacks(const int slotIndex)
 
         if (auto* c = appContext.pluginHostManager->getPluginChain())
             c->removePluginFromSlot(idx);
+
+        if (appContext.projectSession != nullptr)
+            appContext.projectSession->markProjectDirty();
 
         refreshSlotDisplays();
     };
@@ -1115,6 +1160,9 @@ bool RackViewComponent::loadPluginIntoSelectedSlot(const juce::PluginDescription
 
     Logger::info("FORGE7 PlayablePreset: plugin load+assign OK slot=" + juce::String(targetSlot));
 
+    if (appContext.projectSession != nullptr)
+        appContext.projectSession->markProjectDirty();
+
     pendingAddSlotIndex = -1;
     selectionBeforePendingAdd = -1;
     browserOpenReason = BrowserOpenReason::None;
@@ -1238,13 +1286,18 @@ void RackViewComponent::promptAddChain()
             if (appContext.sceneManager == nullptr)
                 return;
 
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->captureLiveChainIntoModel();
+
             const juce::String trimmed = enteredName.trim();
             const juce::String id = appContext.sceneManager->createChainVariation(trimmed);
 
             if (id.isEmpty())
                 Logger::warn("FORGE7: createChainVariation returned empty id");
 
-            if (appContext.pluginHostManager != nullptr)
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->pushActiveChainToLiveHost();
+            else if (appContext.pluginHostManager != nullptr)
                 appContext.pluginHostManager->commitChainVariationCrossfade(*appContext.sceneManager);
 
             refreshSlotDisplays();
@@ -1280,6 +1333,10 @@ void RackViewComponent::promptRenameActiveChain()
                 return;
 
             appContext.sceneManager->renameChainVariation(idx, enteredName.trim());
+
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->markProjectDirty();
+
             refreshSlotDisplays();
             syncEncoderFocus();
         });
@@ -1299,12 +1356,17 @@ void RackViewComponent::promptAddScene()
             if (appContext.sceneManager == nullptr)
                 return;
 
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->captureLiveChainIntoModel();
+
             const juce::String id = appContext.sceneManager->createScene(enteredName.trim());
 
             if (id.isEmpty())
                 Logger::warn("FORGE7: createScene returned empty id");
 
-            if (appContext.pluginHostManager != nullptr)
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->pushActiveChainToLiveHost();
+            else if (appContext.pluginHostManager != nullptr)
                 appContext.pluginHostManager->commitChainVariationCrossfade(*appContext.sceneManager);
 
             refreshSlotDisplays();
@@ -1335,6 +1397,10 @@ void RackViewComponent::promptRenameActiveScene()
                 return;
 
             appContext.sceneManager->renameScene(idx, enteredName.trim());
+
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->markProjectDirty();
+
             refreshSlotDisplays();
             syncEncoderFocus();
         });

@@ -12,8 +12,7 @@ namespace forge7
 
 class MidiControlInput;
 class ParameterMappingManager;
-class SceneManager;
-class PluginHostManager;
+class ProjectSession;
 
 /** Central hub: all physical inputs normalize into `HardwareControlEvent` and enter here.
 
@@ -61,9 +60,8 @@ public:
     /** Entry point for every transport - **the** normalization boundary. */
     void submitHardwareEvent(HardwareControlEvent event);
 
-    /** Optional built-in routing: chain prev/next invoke scene variation stepping with crossfade.
-        Set from app startup; omit for headless/tests. */
-    void attachSceneNavigation(SceneManager* scenes, PluginHostManager* host) noexcept;
+    /** Hardware chain prev/next: capture outgoing rack into model, then crossfade (see `ProjectSession`). */
+    void attachProjectSession(ProjectSession* session) noexcept;
 
     MidiControlInput* getMidiControlInputForSetup() noexcept { return midiInput.get(); }
 
@@ -76,8 +74,7 @@ private:
     ParameterMappingManager& parameterMappingManager;
     HardwareControlState hardwareState {};
 
-    SceneManager* sceneManager = nullptr;
-    PluginHostManager* pluginHostManager = nullptr;
+    ProjectSession* projectSession = nullptr;
 
     std::unique_ptr<MidiControlInput> midiInput;
 

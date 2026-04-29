@@ -13,6 +13,7 @@
 #include "../PluginHost/PluginHostManager.h"
 #include "../Scene/SceneManager.h"
 #include "../Storage/ProjectSerializer.h"
+#include "ProjectSession.h"
 #include "../Utilities/Logger.h"
 #include "../Utilities/DebugSessionLog.h"
 
@@ -136,13 +137,26 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                                                *parameterMappingManager,
                                                                forgeProjectTitle);
 
+    projectSession = std::make_unique<ProjectSession>(*sceneManager, *pluginHostManager, *projectSerializer);
+    appContext.projectSession = projectSession.get();
+
+    if (parameterMappingManager != nullptr)
+    {
+        parameterMappingManager->setOnMappingsDirty(
+            [this]()
+            {
+                if (projectSession != nullptr)
+                    projectSession->markProjectDirty();
+            });
+    }
+
     appContext.audioEngine = audioEngine.get();
     appContext.sceneManager = sceneManager.get();
     appContext.pluginHostManager = pluginHostManager.get();
     appContext.controlManager = controlManager.get();
 
     if (controlManager != nullptr)
-        controlManager->attachSceneNavigation(sceneManager.get(), pluginHostManager.get());
+        controlManager->attachProjectSession(projectSession.get());
     appContext.projectSerializer = projectSerializer.get();
     appContext.parameterMappingManager = parameterMappingManager.get();
 
@@ -157,6 +171,19 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     // appContext.appConfig already set before AudioEngine init above.
 
     mainWindow = std::make_unique<ForgeMainWindow>("FORGE 7", std::make_unique<MainComponent>(appContext));
+
+    if (projectSession != nullptr)
+    {
+        projectSession->setOnProjectStateChanged(
+            [this]()
+            {
+                if (mainWindow == nullptr)
+                    return;
+
+                if (auto* mc = dynamic_cast<MainComponent*>(mainWindow->getContentComponent()))
+                    mc->refreshProjectDependentViews();
+            });
+    }
 
 #if JUCE_MAC
     /** Activate app before creating a second native window (helps macOS show the dev tools panel when launched via `open`). */
@@ -254,7 +281,8 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                      host = pluginHostManager.get(),
                                      cfg = appConfig.get(),
                                      win = mainWindow.get(),
-                                     audio = audioEngine.get()]()
+                                     audio = audioEngine.get(),
+                                     ps = projectSession.get()]()
                                     {
                                         if (proj == nullptr || host == nullptr || cfg == nullptr || win == nullptr)
                                             return;
@@ -279,8 +307,10 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                         }
 
                                         if (auto* mc = dynamic_cast<MainComponent*>(win->getContentComponent()))
-                                            if (auto* rv = mc->getRackView())
-                                                rv->refreshAfterProjectHydration();
+                                            mc->refreshProjectDependentViews();
+
+                                        if (ps != nullptr)
+                                            ps->clearProjectDirtyAfterSave();
 
                                         Logger::info("FORGE7: restored last project at startup - "
                                                      + file.getFullPathName());
@@ -318,10 +348,12 @@ void ForgeApplication::shutdown()
 
     appContext.getProjectDisplayName = nullptr;
     appContext.setProjectDisplayName = nullptr;
+    appContext.projectSession = nullptr;
     appContext.appConfig = nullptr;
     appContext.showSimulatedHardwareWindow = nullptr;
     devToolsWindow.reset();
     mainWindow.reset();
+    projectSession.reset();
     projectSerializer.reset();
     controlManager.reset();
     audioEngine.reset();

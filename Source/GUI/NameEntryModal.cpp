@@ -508,6 +508,9 @@ void NameEntryModal::handleSavePressed()
 
     if (r == NameEntrySaveOutcome::Success)
     {
+        if (onSaveSuccess != nullptr)
+            onSaveSuccess();
+
         dismissAsync();
         return;
     }
@@ -542,6 +545,9 @@ void NameEntryModal::handleReplacePressed()
 
     if (r == NameEntrySaveOutcome::Success)
     {
+        if (onSaveSuccess != nullptr)
+            onSaveSuccess();
+
         dismissAsync();
         return;
     }
@@ -565,7 +571,8 @@ void NameEntryModal::handleReplaceCancelPressed()
 void NameEntryModal::showSaveDialog(AppContext& appContextIn,
                                     const juce::String& title,
                                     const juce::String& initialText,
-                                    SaveAttemptHandler trySave)
+                                    SaveAttemptHandler trySave,
+                                    std::function<void()> onSaveSuccessIn)
 {
     if (appContextIn.mainComponent == nullptr)
         return;
@@ -574,6 +581,7 @@ void NameEntryModal::showSaveDialog(AppContext& appContextIn,
     modal->plainMode = false;
     modal->phase = Phase::Entry;
     modal->saveAttempt = std::move(trySave);
+    modal->onSaveSuccess = std::move(onSaveSuccessIn);
     modal->titleLabel.setText(title, juce::dontSendNotification);
     modal->nameEditor.setText(initialText, juce::dontSendNotification);
     modal->statusLabel.setText({}, juce::dontSendNotification);

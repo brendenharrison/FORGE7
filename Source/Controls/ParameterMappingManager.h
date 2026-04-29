@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <vector>
 
 #include <juce_audio_processors/juce_audio_processors.h>
@@ -74,6 +75,9 @@ public:
 
     void importMappingsFromVar(const juce::var& data);
 
+    /** Optional: conservative dirty signal when mappings change from UI/learn (not used during project import). */
+    void setOnMappingsDirty(std::function<void()> f) { onMappingsDirty = std::move(f); }
+
     // --- Future GUI learn (placeholders) ---------------------------------------------
 
     /** Future: arm learn mode so the next touched plugin UI control binds to `hardwareId`. */
@@ -84,8 +88,12 @@ public:
     bool isLearning() const noexcept;
 
 private:
+    void notifyMappingsDirtyUserEdit();
+
     SceneManager& sceneManager;
     PluginHostManager& pluginHostManager;
+
+    std::function<void()> onMappingsDirty;
 
     mutable juce::CriticalSection mappingLock;
     std::vector<ParameterMappingDescriptor> mappings;

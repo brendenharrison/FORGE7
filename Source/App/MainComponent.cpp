@@ -110,6 +110,15 @@ MainComponent::~MainComponent()
     appContext.mainComponent = nullptr;
 }
 
+void MainComponent::refreshProjectDependentViews()
+{
+    if (performanceView != nullptr)
+        performanceView->refreshHud();
+
+    if (rackView != nullptr)
+        rackView->refreshAfterProjectHydration();
+}
+
 void MainComponent::paint(juce::Graphics& g)
 {
     g.fillAll(juce::Colours::black.withAlpha(0.88f));

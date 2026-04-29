@@ -42,6 +42,9 @@ struct NavigationStatus
     /** "Chain 02 / 04" or "-" when none. */
     juce::String getChainCountSummary() const;
 
+    /** "Scene 02 / 10" or "-" when none. */
+    juce::String getSceneCountSummary() const;
+
     /** "Project: ..." or empty when no project name. */
     juce::String getProjectHeaderLine() const;
 };

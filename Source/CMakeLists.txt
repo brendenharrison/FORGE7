@@ -2,6 +2,7 @@
 set(FORGE7_SOURCES
     App/ForgeApplication.cpp
     App/MainComponent.cpp
+    App/ProjectSession.cpp
     App/AppConfig.cpp
     App/DevToolsWindow.cpp
 
@@ -34,6 +35,7 @@ set(FORGE7_SOURCES
     GUI/RackViewComponent.cpp
     GUI/SimulatedControlsComponent.cpp
     GUI/ProjectLibraryDialogs.cpp
+    GUI/UnsavedChangesModal.cpp
     GUI/NameEntryModal.cpp
     GUI/NavigationStatus.cpp
     GUI/FullscreenPluginEditorComponent.cpp

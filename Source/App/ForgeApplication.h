@@ -6,6 +6,7 @@
 
 #include "AppContext.h"
 #include "AppConfig.h"
+#include "ProjectSession.h"
 
 namespace forge7
 {
@@ -48,6 +49,7 @@ private:
     std::unique_ptr<ControlManager> controlManager;
     juce::String forgeProjectTitle { "Untitled Project" };
     std::unique_ptr<AppConfig> appConfig;
+    std::unique_ptr<ProjectSession> projectSession;
     std::unique_ptr<ProjectSerializer> projectSerializer;
     /** Top-level frame; owns the root MainComponent via setContentOwned. */
     std::unique_ptr<juce::DocumentWindow> mainWindow;

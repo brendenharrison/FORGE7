@@ -16,7 +16,8 @@ struct AppContext;
 
 void runSaveProjectToLibraryDialog(juce::Component* modalParent,
                                    AppContext& appContext,
-                                   std::function<void(const juce::String&)> statusMessage = {});
+                                   std::function<void(const juce::String&)> statusMessage = {},
+                                   std::function<void()> onSavedSuccessfully = {});
 
 void runLoadProjectFromLibraryBrowser(juce::Component* modalParent,
                                       AppContext& appContext,

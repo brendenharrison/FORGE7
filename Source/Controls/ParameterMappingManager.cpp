@@ -55,6 +55,12 @@ ParameterMappingManager::ParameterMappingManager(SceneManager& scenes, PluginHos
 
 ParameterMappingManager::~ParameterMappingManager() = default;
 
+void ParameterMappingManager::notifyMappingsDirtyUserEdit()
+{
+    if (onMappingsDirty != nullptr)
+        onMappingsDirty();
+}
+
 void ParameterMappingManager::clampDescriptor(ParameterMappingDescriptor& d)
 {
     d.minValue = juce::jlimit(0.0f, 1.0f, d.minValue);
@@ -358,16 +364,20 @@ void ParameterMappingManager::upsertMapping(ParameterMappingDescriptor mapping)
             && existing.chainVariationId == mapping.chainVariationId)
         {
             existing = std::move(mapping);
+            notifyMappingsDirtyUserEdit();
             return;
         }
     }
 
     mappings.push_back(std::move(mapping));
+    notifyMappingsDirtyUserEdit();
 }
 
 void ParameterMappingManager::removeMapping(const ParameterMappingDescriptor& keyMatch)
 {
     const juce::ScopedLock lock(mappingLock);
+
+    const auto before = mappings.size();
 
     mappings.erase(std::remove_if(mappings.begin(),
                                   mappings.end(),
@@ -378,6 +388,9 @@ void ParameterMappingManager::removeMapping(const ParameterMappingDescriptor& ke
                                              && m.chainVariationId == keyMatch.chainVariationId;
                                   }),
                    mappings.end());
+
+    if (mappings.size() != before)
+        notifyMappingsDirtyUserEdit();
 }
 
 juce::Array<ParameterMappingDescriptor> ParameterMappingManager::getAllMappings() const

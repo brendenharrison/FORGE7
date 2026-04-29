@@ -49,6 +49,12 @@ public:
                                      PluginHostManager* hydrateIntoHost = nullptr,
                                      AudioEngine* audioEngine = nullptr);
 
+    /** Copies the live plugin rack into the active scene's active chain (message thread). */
+    void captureActiveChainFromLiveHost(PluginHostManager& host);
+
+    /** Loads the active scene's active chain snapshot into the host (message thread). */
+    void hydrateActiveChainIntoHost(PluginHostManager& host);
+
 private:
     SceneManager& sceneManager;
     ParameterMappingManager& parameterMappingManager;

@@ -5,9 +5,8 @@
 
 #include "MidiControlInput.h"
 
-#include "../PluginHost/PluginHostManager.h"
+#include "../App/ProjectSession.h"
 #include "../Utilities/Logger.h"
-#include "../Scene/SceneManager.h"
 #include "ParameterMappingManager.h"
 
 namespace forge7
@@ -41,10 +40,9 @@ void ControlManager::removeListener(Listener* listener)
     listeners.remove(listener);
 }
 
-void ControlManager::attachSceneNavigation(SceneManager* scenes, PluginHostManager* host) noexcept
+void ControlManager::attachProjectSession(ProjectSession* session) noexcept
 {
-    sceneManager = scenes;
-    pluginHostManager = host;
+    projectSession = session;
 }
 
 void ControlManager::applyEventToState(const HardwareControlEvent& e)
@@ -100,16 +98,16 @@ void ControlManager::routeThroughMappingStub(const HardwareControlEvent& e)
 
 void ControlManager::invokeSceneNavigationIfAttached(const HardwareControlEvent& e)
 {
-    if (sceneManager == nullptr || pluginHostManager == nullptr)
+    if (projectSession == nullptr)
         return;
 
     if (e.type != HardwareControlType::ButtonPressed)
         return;
 
     if (e.id == HardwareControlId::ChainPreviousButton)
-        sceneManager->previousChainVariationWithCrossfade(*pluginHostManager);
+        projectSession->previousChain();
     else if (e.id == HardwareControlId::ChainNextButton)
-        sceneManager->nextChainVariationWithCrossfade(*pluginHostManager);
+        projectSession->nextChain();
 }
 
 void ControlManager::notifyListeners(const HardwareControlEvent& e)
