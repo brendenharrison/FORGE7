@@ -2,6 +2,8 @@
 
 #include <functional>
 
+#include <juce_core/juce_core.h>
+
 namespace forge7
 {
 
@@ -40,6 +42,15 @@ struct AppContext
 
     /** Desktop dev-only: raise/reopen the simulated hardware window (if enabled). */
     std::function<void()> showSimulatedHardwareWindow;
+
+    /** Current project title for save dialogs (optional). */
+    std::function<juce::String()> getProjectDisplayName;
+
+    /** Updates title after save/load (optional). */
+    std::function<void(const juce::String&)> setProjectDisplayName;
+
+    /** When set, encoder long-press is handled here first (e.g. modal back/dismiss). Return true if consumed. */
+    std::function<bool()> tryConsumeEncoderLongPress;
 };
 
 } // namespace forge7

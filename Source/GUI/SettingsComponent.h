@@ -39,6 +39,10 @@ private:
     juce::Label sectionAudioLabel;
     juce::Label monoRoutingHintLabel;
 
+    juce::Label sectionStorageLabel;
+    juce::Label libraryRootPathLabel;
+    juce::TextButton openLibraryFolderButton { "Open Library Folder" };
+
     juce::TextButton saveAudioButton { "Save Audio Settings" };
     juce::Label saveStatusLabel;
 

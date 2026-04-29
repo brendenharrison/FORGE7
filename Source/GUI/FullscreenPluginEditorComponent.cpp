@@ -229,7 +229,15 @@ void FullscreenPluginEditorComponent::timerCallback()
                     : juce::jlimit(0, static_cast<int>(vars.size()) - 1, sc.getActiveChainVariationIndex());
 
             if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
-                line += "   -   Var: " + vars[static_cast<size_t>(vi)]->getVariationName();
+            {
+                const int oneBased = vi + 1;
+                const juce::String idx = oneBased < 10 ? juce::String("0") + juce::String(oneBased)
+                                                       : juce::String(oneBased);
+                const juce::String name = vars[static_cast<size_t>(vi)]->getVariationName();
+                line += "   -   Chain " + idx;
+                if (name.isNotEmpty())
+                    line += " - " + name;
+            }
         }
 
         sceneVarLabel.setText(line, juce::dontSendNotification);

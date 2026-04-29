@@ -145,6 +145,15 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
         controlManager->attachSceneNavigation(sceneManager.get(), pluginHostManager.get());
     appContext.projectSerializer = projectSerializer.get();
     appContext.parameterMappingManager = parameterMappingManager.get();
+
+    appContext.getProjectDisplayName = [this]()
+    {
+        return forgeProjectTitle;
+    };
+    appContext.setProjectDisplayName = [this](const juce::String& s)
+    {
+        forgeProjectTitle = s;
+    };
     // appContext.appConfig already set before AudioEngine init above.
 
     mainWindow = std::make_unique<ForgeMainWindow>("FORGE 7", std::make_unique<MainComponent>(appContext));
@@ -305,6 +314,10 @@ void ForgeApplication::showSimulatedHardwareWindow()
 
 void ForgeApplication::shutdown()
 {
+    // TODO: optional quit-time copy or serialize to Backups/Autosave.forgeproject (message thread only).
+
+    appContext.getProjectDisplayName = nullptr;
+    appContext.setProjectDisplayName = nullptr;
     appContext.appConfig = nullptr;
     appContext.showSimulatedHardwareWindow = nullptr;
     devToolsWindow.reset();

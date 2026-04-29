@@ -17,7 +17,7 @@ ChainSnapshot ChainSnapshot::createEmptyFixedLayout()
 
 ChainVariation::ChainVariation()
     : variationId(juce::Uuid().toString())
-    , variationName("Variation A")
+    , variationName()
 {
     chainSnapshot = ChainSnapshot::createEmptyFixedLayout();
 }

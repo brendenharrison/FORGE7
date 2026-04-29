@@ -17,6 +17,8 @@
 #include "../Scene/ChainVariation.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
+#include "../Utilities/Logger.h"
+#include "NavigationStatus.h"
 
 namespace forge7
 {
@@ -186,14 +188,28 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
 
     chainPrevButton.onClick = [this]()
     {
-        if (appContext.sceneManager != nullptr && appContext.pluginHostManager != nullptr)
-            appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
+        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+            return;
+
+        const int before = appContext.sceneManager->getActiveChainVariationIndex();
+        appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
+        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+
+        if (before == 0 && after != 0)
+            Logger::info("FORGE7: Chain - wrapped from first to last");
     };
 
     chainNextButton.onClick = [this]()
     {
-        if (appContext.sceneManager != nullptr && appContext.pluginHostManager != nullptr)
-            appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
+        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+            return;
+
+        const int before = appContext.sceneManager->getActiveChainVariationIndex();
+        appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
+        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+
+        if (after == 0 && before != 0)
+            Logger::info("FORGE7: Chain + wrapped from last to first");
     };
 
     settingsButton.onClick = [this]()
@@ -212,20 +228,26 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
 
     addAndMakeVisible(cpuMeter);
 
+    projectNameLabel.setJustificationType(juce::Justification::centredLeft);
+    projectNameLabel.setFont(juce::Font(13.0f));
+    projectNameLabel.setColour(juce::Label::textColourId, perfMuted());
+    projectNameLabel.setMinimumHorizontalScale(0.75f);
+    addAndMakeVisible(projectNameLabel);
+
     heroSceneLabel.setJustificationType(juce::Justification::centredLeft);
     heroSceneLabel.setFont(juce::Font(34.0f));
     heroSceneLabel.setColour(juce::Label::textColourId, perfText());
     addAndMakeVisible(heroSceneLabel);
 
-    variationLabel.setJustificationType(juce::Justification::centredLeft);
-    variationLabel.setFont(juce::Font(22.0f));
-    variationLabel.setColour(juce::Label::textColourId, perfAccent());
-    addAndMakeVisible(variationLabel);
+    chainHeaderLabel.setJustificationType(juce::Justification::centredLeft);
+    chainHeaderLabel.setFont(juce::Font(22.0f));
+    chainHeaderLabel.setColour(juce::Label::textColourId, perfAccent());
+    addAndMakeVisible(chainHeaderLabel);
 
-    chainVarIndexLabel.setJustificationType(juce::Justification::centred);
-    chainVarIndexLabel.setFont(juce::Font(16.0f));
-    chainVarIndexLabel.setColour(juce::Label::textColourId, perfMuted());
-    addAndMakeVisible(chainVarIndexLabel);
+    chainCountLabel.setJustificationType(juce::Justification::centred);
+    chainCountLabel.setFont(juce::Font(16.0f));
+    chainCountLabel.setColour(juce::Label::textColourId, perfMuted());
+    addAndMakeVisible(chainCountLabel);
 
     for (size_t i = 0; i < knobCards.size(); ++i)
     {
@@ -297,55 +319,21 @@ void PerformanceViewComponent::syncEncoderFocus()
 
 void PerformanceViewComponent::refreshHud()
 {
-    juce::String sceneName { "Scene" };
-    juce::String variationName { "Variation" };
-    juce::String bpmLine { "- BPM" };
+    const NavigationStatus nav = computeNavigationStatus(appContext);
 
-    juce::String activeSceneId;
-    juce::String activeVarId;
+    const juce::String sceneDisplay =
+        nav.hasActiveScene() && nav.sceneName.isNotEmpty() ? nav.sceneName
+                                                           : juce::String("Untitled scene");
+
+    const juce::String bpmLine =
+        nav.hasActiveScene() ? juce::String(nav.tempoBpm, 1) + " BPM" : juce::String("- BPM");
 
     const ParameterMappingDescriptor* mapKnob[4] = {};
 
-    int variationIndexDisplay = -1;
-    int variationCountDisplay = 0;
-
     if (appContext.sceneManager != nullptr)
     {
-        const auto& scenes = appContext.sceneManager->getScenes();
-        const int activeIdx = appContext.sceneManager->getActiveSceneIndex();
-
-        if (juce::isPositiveAndBelow(activeIdx, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(activeIdx)] != nullptr)
-        {
-            const auto& sc = *scenes[static_cast<size_t>(activeIdx)];
-            sceneName = sc.getSceneName().isNotEmpty() ? sc.getSceneName() : juce::String("Untitled scene");
-            activeSceneId = sc.getSceneId();
-
-            bpmLine = juce::String(sc.getTempoBpm(), 1) + " BPM";
-
-            const auto& vars = sc.getVariations();
-            const int rawVi = sc.getActiveChainVariationIndex();
-            const int vi =
-                vars.empty() ? 0
-                             : juce::jlimit(0, static_cast<int>(vars.size()) - 1, rawVi);
-
-            variationCountDisplay = static_cast<int>(vars.size());
-
-            if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
-            {
-                const auto& v = *vars[static_cast<size_t>(vi)];
-                variationName = v.getVariationName().isNotEmpty() ? v.getVariationName() : juce::String("Variation");
-                activeVarId = v.getVariationId();
-                variationIndexDisplay = vi;
-            }
-
-            chainPrevButton.setEnabled(variationIndexDisplay > 0);
-            chainNextButton.setEnabled(variationCountDisplay > 0 && variationIndexDisplay < variationCountDisplay - 1);
-        }
-        else
-        {
-            chainPrevButton.setEnabled(false);
-            chainNextButton.setEnabled(false);
-        }
+        chainPrevButton.setEnabled(nav.chainCount > 0);
+        chainNextButton.setEnabled(nav.chainCount > 0);
 
         juce::Array<ParameterMappingDescriptor> mappingRows;
 
@@ -355,13 +343,13 @@ void PerformanceViewComponent::refreshHud()
         for (int k = 0; k < 4; ++k)
         {
             const auto hid = static_cast<HardwareControlId>(static_cast<int>(HardwareControlId::Knob1) + k);
-            mapKnob[k] = findMappingFor(mappingRows, activeSceneId, activeVarId, hid);
+            mapKnob[k] = findMappingFor(mappingRows, nav.sceneId, nav.chainId, hid);
         }
 
         const ParameterMappingDescriptor* mapA1 =
-            findMappingFor(mappingRows, activeSceneId, activeVarId, HardwareControlId::AssignButton1);
+            findMappingFor(mappingRows, nav.sceneId, nav.chainId, HardwareControlId::AssignButton1);
         const ParameterMappingDescriptor* mapA2 =
-            findMappingFor(mappingRows, activeSceneId, activeVarId, HardwareControlId::AssignButton2);
+            findMappingFor(mappingRows, nav.sceneId, nav.chainId, HardwareControlId::AssignButton2);
 
         assign1FunctionLabel.setText(mapA1 != nullptr && mapA1->displayName.isNotEmpty() ? mapA1->displayName
                                                                                          : juce::String("-"),
@@ -371,17 +359,17 @@ void PerformanceViewComponent::refreshHud()
                                                                                          : juce::String("-"),
                                    juce::dontSendNotification);
     }
-
-    heroSceneLabel.setText(sceneName, juce::dontSendNotification);
-    variationLabel.setText(variationName, juce::dontSendNotification);
-    bpmStatusLabel.setText(bpmLine, juce::dontSendNotification);
-
-    if (variationCountDisplay > 0 && variationIndexDisplay >= 0)
-        chainVarIndexLabel.setText(juce::String(variationIndexDisplay + 1) + " / "
-                                       + juce::String(variationCountDisplay),
-                                   juce::dontSendNotification);
     else
-        chainVarIndexLabel.setText("-", juce::dontSendNotification);
+    {
+        chainPrevButton.setEnabled(false);
+        chainNextButton.setEnabled(false);
+    }
+
+    projectNameLabel.setText(nav.getProjectHeaderLine(), juce::dontSendNotification);
+    heroSceneLabel.setText(sceneDisplay, juce::dontSendNotification);
+    chainHeaderLabel.setText(nav.getChainDisplayLabel(), juce::dontSendNotification);
+    bpmStatusLabel.setText(bpmLine, juce::dontSendNotification);
+    chainCountLabel.setText(nav.getChainCountSummary(), juce::dontSendNotification);
 
     if (appContext.controlManager != nullptr)
     {
@@ -455,17 +443,19 @@ void PerformanceViewComponent::resized()
 
     r.reduce(14, 10);
 
+    projectNameLabel.setBounds(r.removeFromTop(18));
+    r.removeFromTop(2);
     heroSceneLabel.setBounds(r.removeFromTop(52));
-    r.removeFromTop(6);
-    variationLabel.setBounds(r.removeFromTop(34));
+    r.removeFromTop(4);
+    chainHeaderLabel.setBounds(r.removeFromTop(34));
 
     auto chainRow = r.removeFromTop(44);
-    const int chainBtnW = juce::jmin(72, chainRow.getWidth() / 8);
+    const int chainBtnW = juce::jmin(96, chainRow.getWidth() / 6);
     chainPrevButton.setBounds(chainRow.removeFromLeft(chainBtnW).reduced(0, 4));
     chainRow.removeFromLeft(8);
     chainNextButton.setBounds(chainRow.removeFromRight(chainBtnW).reduced(0, 4));
     chainRow.removeFromRight(8);
-    chainVarIndexLabel.setBounds(chainRow.reduced(4, 6));
+    chainCountLabel.setBounds(chainRow.reduced(4, 6));
 
     r.removeFromTop(12);
 

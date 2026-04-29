@@ -7,6 +7,7 @@
 #include "../Audio/AudioEngine.h"
 #include "../GUI/LevelMeter.h"
 #include "../Platform/MacAudioPermission.h"
+#include "../Storage/ForgeStoragePaths.h"
 #include "../Utilities/Logger.h"
 
 namespace forge7
@@ -117,6 +118,28 @@ SettingsComponent::SettingsComponent(AppContext& context, std::function<void()> 
     monoRoutingHintLabel.setFont(juce::Font(12.0f));
     monoRoutingHintLabel.setColour(juce::Label::textColourId, muted());
     addAndMakeVisible(monoRoutingHintLabel);
+
+    sectionStorageLabel.setText("FORGE7 Library", juce::dontSendNotification);
+    sectionStorageLabel.setJustificationType(juce::Justification::centredLeft);
+    sectionStorageLabel.setFont(juce::Font(16.0f));
+    sectionStorageLabel.setColour(juce::Label::textColourId, accent());
+    addAndMakeVisible(sectionStorageLabel);
+
+    libraryRootPathLabel.setJustificationType(juce::Justification::topLeft);
+    libraryRootPathLabel.setFont(juce::Font(12.0f));
+    libraryRootPathLabel.setColour(juce::Label::textColourId, muted());
+    libraryRootPathLabel.setMinimumHorizontalScale(0.7f);
+    addAndMakeVisible(libraryRootPathLabel);
+
+    styleTopButton(openLibraryFolderButton);
+    openLibraryFolderButton.onClick = [this]()
+    {
+        ensureForgeStorageFoldersExist();
+        const juce::File root = getForgeUserDataDirectory();
+        if (root.exists())
+            root.revealToUser();
+    };
+    addAndMakeVisible(openLibraryFolderButton);
 
     styleTopButton(saveAudioButton);
     saveAudioButton.onClick = [this]() { saveAudioSettings(); };
@@ -355,6 +378,15 @@ void SettingsComponent::resized()
     monoRoutingHintLabel.setBounds(area.removeFromTop(40));
     area.removeFromTop(8);
 
+    auto storageHead = area.removeFromTop(24);
+    sectionStorageLabel.setBounds(storageHead);
+    area.removeFromTop(4);
+    libraryRootPathLabel.setBounds(area.removeFromTop(40));
+    area.removeFromTop(6);
+    auto storageBtn = area.removeFromTop(32);
+    openLibraryFolderButton.setBounds(storageBtn.removeFromLeft(200).reduced(0, 2));
+    area.removeFromTop(8);
+
     auto saveRow = area.removeFromTop(34);
     saveAudioButton.setBounds(saveRow.removeFromLeft(170).reduced(0, 2));
     saveRow.removeFromLeft(10);
@@ -497,8 +529,13 @@ void SettingsComponent::refreshStatus()
         ch3RawPeakLabel.setText("Ch 3 raw peak: -", juce::dontSendNotification);
         ch4RawPeakLabel.setText("Ch 4 raw peak: -", juce::dontSendNotification);
         diagnosisLabel.setText("", juce::dontSendNotification);
+        libraryRootPathLabel.setText("FORGE7 Library: -", juce::dontSendNotification);
         return;
     }
+
+    ensureForgeStorageFoldersExist();
+    libraryRootPathLabel.setText("FORGE7 Library: " + getForgeUserDataDirectory().getFullPathName(),
+                                 juce::dontSendNotification);
 
     auto* engine = appContext.audioEngine;
     auto& dm = engine->getDeviceManager();

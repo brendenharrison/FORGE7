@@ -28,7 +28,8 @@ namespace forge7
 namespace
 {
 
-constexpr int kCurrentProjectFileVersion = 1;
+constexpr int kCurrentProjectFileVersion = 2;
+constexpr int kMinSupportedProjectFileVersion = 1;
 
 juce::var slotSnapshotToVar(const ChainSlotSnapshot& s)
 {
@@ -111,9 +112,10 @@ void chainSnapshotFromVar(const juce::var& v, ChainSnapshot& out)
 
 juce::var chainVariationToVar(const ChainVariation& cv)
 {
+    /** v2: write `chainId` / `chainName` (user-facing terminology). Legacy v1 used `variationId` / `variationName`. */
     auto* o = new juce::DynamicObject();
-    o->setProperty("variationId", cv.getVariationId());
-    o->setProperty("variationName", cv.getVariationName());
+    o->setProperty("chainId", cv.getVariationId());
+    o->setProperty("chainName", cv.getVariationName());
     o->setProperty("chainSnapshot", chainSnapshotToVar(cv.getChainSnapshot()));
     o->setProperty("controlMappings", cv.getControlMappingsSerialized());
     o->setProperty("notes", cv.getNotes());
@@ -128,13 +130,19 @@ bool chainVariationFromVar(const juce::var& v, std::unique_ptr<ChainVariation>& 
     if (o == nullptr)
         return false;
 
-    const juce::String vid = o->getProperty("variationId").toString();
-    const juce::String vname = o->getProperty("variationName").toString();
+    /** v2 keys preferred; v1 keys (`variationId` / `variationName`) accepted for backward compatibility. */
+    juce::String vid = o->getProperty("chainId").toString();
+    if (vid.isEmpty())
+        vid = o->getProperty("variationId").toString();
+
+    juce::String vname = o->getProperty("chainName").toString();
+    if (vname.isEmpty())
+        vname = o->getProperty("variationName").toString();
 
     if (vid.isEmpty())
         return false;
 
-    auto cv = std::make_unique<ChainVariation>(vid, vname.isEmpty() ? juce::String("Variation") : vname);
+    auto cv = std::make_unique<ChainVariation>(vid, vname);
 
     chainSnapshotFromVar(o->getProperty("chainSnapshot"), cv->getChainSnapshot());
 
@@ -162,12 +170,13 @@ juce::var sceneToVar(const Scene& scene)
         if (cv != nullptr)
             vars.add(chainVariationToVar(*cv));
 
+    /** v2: write `chains` and `activeChainIndex` (user-facing). Legacy keys not written. */
     auto* o = new juce::DynamicObject();
     o->setProperty("sceneId", scene.getSceneId());
     o->setProperty("sceneName", scene.getSceneName());
     o->setProperty("tempoBpm", scene.getTempoBpm());
-    o->setProperty("activeChainVariationIndex", scene.getActiveChainVariationIndex());
-    o->setProperty("chainVariations", juce::var(vars));
+    o->setProperty("activeChainIndex", scene.getActiveChainVariationIndex());
+    o->setProperty("chains", juce::var(vars));
 
     return juce::var(o);
 }
@@ -188,15 +197,25 @@ bool sceneFromVar(const juce::var& v, std::unique_ptr<Scene>& outScene)
                                  : std::make_unique<Scene>(sid, sname);
 
     scene->setTempoBpm(static_cast<double>(o->getProperty("tempoBpm")));
-    scene->setActiveChainVariationIndex(static_cast<int>(static_cast<int>(o->getProperty("activeChainVariationIndex"))));
+
+    /** v2 active index key preferred; fall back to v1 `activeChainVariationIndex`. */
+    int activeIdx = 0;
+    if (o->hasProperty("activeChainIndex"))
+        activeIdx = static_cast<int>(o->getProperty("activeChainIndex"));
+    else if (o->hasProperty("activeChainVariationIndex"))
+        activeIdx = static_cast<int>(o->getProperty("activeChainVariationIndex"));
+    scene->setActiveChainVariationIndex(activeIdx);
 
     scene->getVariations().clear();
 
-    const juce::var cvVar(o->getProperty("chainVariations"));
+    /** v2: `chains` array; v1 fallback: `chainVariations`. */
+    juce::var chainsArr(o->getProperty("chains"));
+    if (! chainsArr.isArray())
+        chainsArr = o->getProperty("chainVariations");
 
-    if (cvVar.isArray())
+    if (chainsArr.isArray())
     {
-        const auto* arr = cvVar.getArray();
+        const auto* arr = chainsArr.getArray();
         if (arr != nullptr)
         {
             for (const auto& item : *arr)
@@ -372,10 +391,16 @@ juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file,
 
     const int version = static_cast<int>(root->getProperty("projectFileVersion"));
 
-    if (version != kCurrentProjectFileVersion)
-        return juce::Result::fail("FORGE7: unsupported or missing projectFileVersion (got "
-                                  + juce::String(version) + ", expected " + juce::String(kCurrentProjectFileVersion)
-                                  + "). Add a migration branch when bumping versions.");
+    if (version < kMinSupportedProjectFileVersion || version > kCurrentProjectFileVersion)
+        return juce::Result::fail("FORGE7: unsupported projectFileVersion (got "
+                                  + juce::String(version) + ", supported "
+                                  + juce::String(kMinSupportedProjectFileVersion) + "-"
+                                  + juce::String(kCurrentProjectFileVersion)
+                                  + ").");
+
+    if (version < kCurrentProjectFileVersion)
+        Logger::info("FORGE7: loading legacy projectFileVersion=" + juce::String(version)
+                     + ", will save as version " + juce::String(kCurrentProjectFileVersion));
 
     projectName = root->getProperty("projectName").toString();
 
