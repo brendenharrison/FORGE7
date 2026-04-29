@@ -60,7 +60,8 @@ void showSimpleAlert(juce::Component* associatedComponent, const juce::String& t
 bool loadProjectFileIntoCurrentSession(juce::Component* modalParent,
                                       AppContext& appContext,
                                       const juce::File& f,
-                                      std::function<void(const juce::String&)> statusMessage)
+                                      std::function<void(const juce::String&)> statusMessage,
+                                      std::function<void()> afterSuccessfulLoad)
 {
     if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
         return false;
@@ -80,6 +81,9 @@ bool loadProjectFileIntoCurrentSession(juce::Component* modalParent,
 
     finishSuccessfulProjectLoad(appContext, f);
     Logger::info("FORGE7: loaded project - " + f.getFullPathName());
+
+    if (afterSuccessfulLoad != nullptr)
+        afterSuccessfulLoad();
 
     if (statusMessage)
         statusMessage("Loaded: " + f.getFileNameWithoutExtension());
@@ -171,20 +175,25 @@ namespace
 void openOrReplaceProjectFromFile(juce::Component* modalParent,
                                   AppContext& appContext,
                                   const juce::File& f,
-                                  std::function<void(const juce::String&)> statusMessage)
+                                  std::function<void(const juce::String&)> statusMessage,
+                                  std::function<void()> afterSuccessfulLoad)
 {
     if (appContext.projectSession != nullptr && appContext.projectSession->isProjectDirty())
     {
         UnsavedChangesModal::show(
             appContext,
-            [modalParent, f, &appContext, statusMessage](UnsavedProjectChoice choice)
+            [modalParent, f, &appContext, statusMessage, afterSuccessfulLoad](UnsavedProjectChoice choice)
             {
                 if (choice == UnsavedProjectChoice::Cancel)
                     return;
 
                 if (choice == UnsavedProjectChoice::Discard)
                 {
-                    loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+                    loadProjectFileIntoCurrentSession(modalParent,
+                                                      appContext,
+                                                      f,
+                                                      statusMessage,
+                                                      std::move(afterSuccessfulLoad));
                     return;
                 }
 
@@ -192,15 +201,23 @@ void openOrReplaceProjectFromFile(juce::Component* modalParent,
                     modalParent,
                     appContext,
                     statusMessage,
-                    [modalParent, f, &appContext, statusMessage]()
+                    [modalParent, f, &appContext, statusMessage, afterSuccessfulLoad]()
                     {
-                        loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+                        loadProjectFileIntoCurrentSession(modalParent,
+                                                          appContext,
+                                                          f,
+                                                          statusMessage,
+                                                          std::move(afterSuccessfulLoad));
                     });
             });
         return;
     }
 
-    loadProjectFileIntoCurrentSession(modalParent, appContext, f, statusMessage);
+    loadProjectFileIntoCurrentSession(modalParent,
+                                      appContext,
+                                      f,
+                                      statusMessage,
+                                      std::move(afterSuccessfulLoad));
 }
 
 } // namespace
@@ -246,7 +263,7 @@ void runLoadProjectFromLibraryBrowser(juce::Component* modalParent,
             return;
 
         const juce::File f = files.getReference(idx);
-        openOrReplaceProjectFromFile(modalParent, appContext, f, std::move(statusMessage));
+        openOrReplaceProjectFromFile(modalParent, appContext, f, std::move(statusMessage), {});
     }
 }
 
@@ -313,8 +330,35 @@ void runImportProjectWithFileChooser(juce::Component* modalParent, AppContext& a
                              if (f == juce::File {} || ctx == nullptr || ctx->projectSerializer == nullptr)
                                  return;
 
-                             openOrReplaceProjectFromFile(modalParent, *ctx, f, {});
+                             openOrReplaceProjectFromFile(modalParent, *ctx, f, {}, {});
                          });
+}
+
+void openLibraryProjectFileReplacingCurrent(juce::Component* modalParent,
+                                            AppContext& appContext,
+                                            const juce::File& projectFile,
+                                            const int selectSceneIndexAfterLoad,
+                                            const int selectChainIndexAfterLoad)
+{
+    const int si = selectSceneIndexAfterLoad;
+    const int ci = selectChainIndexAfterLoad;
+
+    openOrReplaceProjectFromFile(
+        modalParent,
+        appContext,
+        projectFile,
+        {},
+        [&appContext, si, ci]()
+        {
+            if (appContext.projectSession == nullptr)
+                return;
+
+            if (si >= 0)
+                appContext.projectSession->switchToScene(si);
+
+            if (ci >= 0)
+                appContext.projectSession->switchToChain(ci);
+        });
 }
 
 } // namespace forge7

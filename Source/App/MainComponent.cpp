@@ -6,6 +6,7 @@
 #include "../GUI/FullscreenPluginEditorComponent.h"
 #include "../GUI/PerformanceViewComponent.h"
 #include "../GUI/RackViewComponent.h"
+#include "../GUI/ProjectSceneBrowserComponent.h"
 #include "../GUI/SettingsComponent.h"
 #include "../GUI/SimulatedControlsComponent.h"
 #include "../PluginHost/PluginChain.h"
@@ -101,11 +102,18 @@ MainComponent::MainComponent(AppContext& context)
 #endif
 
     setEditMode(false);
+
+    appContext.tryConsumeEncoderLongPress = [this]()
+    {
+        return handleGlobalEncoderLongPress();
+    };
 }
 
 MainComponent::~MainComponent()
 {
     closeFullscreenPluginEditor();
+    closeProjectSceneJumpBrowser();
+    appContext.tryConsumeEncoderLongPress = {};
     appContext.encoderNavigator = nullptr;
     appContext.mainComponent = nullptr;
 }
@@ -143,6 +151,15 @@ void MainComponent::resized()
         settingsComponent->toFront(false);
         encoderNavigator.setBounds(bounds);
         encoderNavigator.toFront(false);
+        return;
+    }
+
+    if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
+    {
+        projectSceneJumpBrowser->setBounds(bounds);
+        encoderNavigator.setBounds(bounds);
+        encoderNavigator.toFront(false);
+        projectSceneJumpBrowser->toFront(false);
         return;
     }
 
@@ -368,10 +385,96 @@ void MainComponent::focusPluginInspectorFromDevTools()
                                              "OK");
 }
 
+bool MainComponent::isProjectSceneJumpBrowserOpen() const noexcept
+{
+    return projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible();
+}
+
+bool MainComponent::handleGlobalEncoderLongPress()
+{
+    if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
+    {
+        closeProjectSceneJumpBrowser();
+        return true;
+    }
+
+    if (fullscreenPluginEditor != nullptr && fullscreenPluginEditor->isShowing())
+    {
+        closeFullscreenPluginEditor();
+        return true;
+    }
+
+    if (settingsComponent != nullptr && settingsComponent->isShowing())
+    {
+        closeSettings();
+        return true;
+    }
+
+    if (rackView != nullptr && rackView->isPluginBrowserVisible())
+    {
+        rackView->closePluginBrowser();
+        return true;
+    }
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    if (simulatedControlsPanelVisible)
+    {
+        hideSimulatedControlsPanel();
+        return true;
+    }
+#endif
+
+    showProjectSceneJumpBrowser();
+    return true;
+}
+
+void MainComponent::showProjectSceneJumpBrowser()
+{
+    if (projectSceneJumpBrowser == nullptr)
+    {
+        projectSceneJumpBrowser = std::make_unique<ProjectSceneBrowserComponent>(
+            appContext,
+            [this]()
+            {
+                closeProjectSceneJumpBrowser();
+            });
+
+        addChildComponent(*projectSceneJumpBrowser);
+    }
+
+    projectSceneJumpBrowser->setVisible(true);
+    projectSceneJumpBrowser->rescanAndRebuild();
+    resized();
+    projectSceneJumpBrowser->toFront(false);
+    encoderNavigator.toFront(false);
+}
+
+void MainComponent::closeProjectSceneJumpBrowser()
+{
+    if (projectSceneJumpBrowser == nullptr || ! projectSceneJumpBrowser->isVisible())
+        return;
+
+    projectSceneJumpBrowser->setVisible(false);
+
+    if (appContext.encoderNavigator != nullptr)
+        appContext.encoderNavigator->clearModalFocusChain();
+
+    if (performanceView != nullptr)
+        performanceView->syncEncoderFocus();
+
+    if (rackView != nullptr)
+        rackView->syncEncoderFocus();
+
+    resized();
+}
+
 juce::String MainComponent::describeUiSurfaceForDevTools() const
 {
     if (fullscreenPluginEditor != nullptr)
         return "Fullscreen Plugin Editor";
+
+    if (isProjectSceneJumpBrowserOpen())
+        return "Jump Browser";
 
  #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     if (simulatedControlsPanelVisible)

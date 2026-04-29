@@ -189,6 +189,8 @@ void UnsavedChangesModal::syncEncoderFocus()
 
 void UnsavedChangesModal::attachEncoderLongPressHandler()
 {
+    previousEncoderLongPressHandler = std::move(appContext.tryConsumeEncoderLongPress);
+
     appContext.tryConsumeEncoderLongPress = [this]()
     {
         cancelButton.triggerClick();
@@ -198,7 +200,7 @@ void UnsavedChangesModal::attachEncoderLongPressHandler()
 
 void UnsavedChangesModal::detachEncoderLongPressHandler()
 {
-    appContext.tryConsumeEncoderLongPress = {};
+    appContext.tryConsumeEncoderLongPress = std::move(previousEncoderLongPressHandler);
 }
 
 void UnsavedChangesModal::dismissAsync()

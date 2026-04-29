@@ -388,6 +388,8 @@ void NameEntryModal::syncEncoderFocus()
 
 void NameEntryModal::attachEncoderLongPressHandler()
 {
+    previousEncoderLongPressHandler = std::move(appContext.tryConsumeEncoderLongPress);
+
     appContext.tryConsumeEncoderLongPress = [this]()
     {
         if (phase == Phase::ReplaceConfirm)
@@ -407,7 +409,7 @@ void NameEntryModal::attachEncoderLongPressHandler()
 
 void NameEntryModal::detachEncoderLongPressHandler()
 {
-    appContext.tryConsumeEncoderLongPress = {};
+    appContext.tryConsumeEncoderLongPress = std::move(previousEncoderLongPressHandler);
 }
 
 void NameEntryModal::appendChar(const juce::juce_wchar ch)

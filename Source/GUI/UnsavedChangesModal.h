@@ -52,6 +52,8 @@ private:
 
     std::function<void(UnsavedProjectChoice)> onChosen;
 
+    std::function<bool()> previousEncoderLongPressHandler;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(UnsavedChangesModal)
 };
 

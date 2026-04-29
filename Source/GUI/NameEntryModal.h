@@ -99,6 +99,8 @@ private:
     void attachEncoderLongPressHandler();
     void detachEncoderLongPressHandler();
 
+    std::function<bool()> previousEncoderLongPressHandler;
+
     void dismissAsync();
     void handleCancelPressed();
     void handleSavePressed();

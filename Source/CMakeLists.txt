@@ -20,6 +20,7 @@ set(FORGE7_SOURCES
     Scene/ChainVariation.cpp
 
     Storage/ProjectSerializer.cpp
+    Storage/ProjectBrowserMetadata.cpp
     Storage/ForgeStoragePaths.cpp
 
     Controls/ControlManager.cpp
@@ -36,6 +37,7 @@ set(FORGE7_SOURCES
     GUI/SimulatedControlsComponent.cpp
     GUI/ProjectLibraryDialogs.cpp
     GUI/UnsavedChangesModal.cpp
+    GUI/ProjectSceneBrowserComponent.cpp
     GUI/NameEntryModal.cpp
     GUI/NavigationStatus.cpp
     GUI/FullscreenPluginEditorComponent.cpp
