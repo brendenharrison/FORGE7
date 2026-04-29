@@ -19,6 +19,7 @@ set(FORGE7_SOURCES
     Scene/ChainVariation.cpp
 
     Storage/ProjectSerializer.cpp
+    Storage/ForgeStoragePaths.cpp
 
     Controls/ControlManager.cpp
     Controls/HardwareControlState.cpp
@@ -32,6 +33,9 @@ set(FORGE7_SOURCES
 
     GUI/RackViewComponent.cpp
     GUI/SimulatedControlsComponent.cpp
+    GUI/ProjectLibraryDialogs.cpp
+    GUI/NameEntryModal.cpp
+    GUI/NavigationStatus.cpp
     GUI/FullscreenPluginEditorComponent.cpp
     GUI/PluginEditorCanvas.cpp
     GUI/RackSlotCard.cpp

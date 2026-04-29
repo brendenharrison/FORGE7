@@ -1,0 +1,265 @@
+#include "ProjectLibraryDialogs.h"
+
+#include <functional>
+
+#include "../App/AppConfig.h"
+#include "../App/AppContext.h"
+#include "../App/MainComponent.h"
+#include "../GUI/NameEntryModal.h"
+#include "../GUI/RackViewComponent.h"
+#include "../Storage/ForgeStoragePaths.h"
+#include "../Storage/ProjectSerializer.h"
+#include "../Utilities/Logger.h"
+
+#include <juce_gui_basics/juce_gui_basics.h>
+
+namespace forge7
+{
+namespace
+{
+
+void finishSuccessfulProjectLoad(AppContext& appContext, const juce::File& f)
+{
+    if (appContext.appConfig != nullptr)
+    {
+        appContext.appConfig->setLastLoadedProjectPath(f.getFullPathName());
+        appContext.appConfig->saveToFile();
+    }
+
+    if (appContext.mainComponent != nullptr && appContext.mainComponent->getRackView() != nullptr)
+        appContext.mainComponent->getRackView()->refreshAfterProjectHydration();
+}
+
+void copyToLastSessionBackup(const juce::File& primarySavedFile)
+{
+    if (! primarySavedFile.existsAsFile())
+        return;
+
+    ensureForgeStorageFoldersExist();
+    const juce::File dest = getBackupsDirectory().getChildFile("LastSession.forgeproject");
+
+    if (! primarySavedFile.copyFileTo(dest))
+        Logger::warn("FORGE7: could not write LastSession backup to " + dest.getFullPathName());
+}
+
+void showSimpleAlert(juce::Component* associatedComponent, const juce::String& title, const juce::String& message)
+{
+    juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::WarningIcon,
+                                           title,
+                                           message,
+                                           "OK",
+                                           associatedComponent,
+                                           nullptr);
+}
+
+} // namespace
+
+void runSaveProjectToLibraryDialog(juce::Component* modalParent,
+                                   AppContext& appContext,
+                                   std::function<void(const juce::String&)> statusMessage)
+{
+    juce::ignoreUnused(modalParent);
+
+    if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
+        return;
+
+    ensureForgeStorageFoldersExist();
+
+    const juce::String fromDisplay =
+        appContext.getProjectDisplayName != nullptr ? appContext.getProjectDisplayName() : juce::String();
+    const juce::String initial =
+        fromDisplay.isNotEmpty() ? fromDisplay : juce::String("Untitled Project");
+
+    NameEntryModal::showSaveDialog(
+        appContext,
+        "Save Project",
+        initial,
+        [&appContext, statusMessage](const juce::String& rawText,
+                                     bool replaceIfExisting,
+                                     juce::String& errorOut) -> NameEntrySaveOutcome
+        {
+            const juce::String entered = rawText.trim();
+            const juce::String safeName = sanitizeLibraryItemName(entered);
+
+            if (safeName.isEmpty())
+            {
+                errorOut = "Enter a valid name.";
+                return NameEntrySaveOutcome::Failed;
+            }
+
+            const juce::File target =
+                getProjectsDirectory().getChildFile(safeName + kForgeProjectExtension);
+
+            if (target.existsAsFile() && ! replaceIfExisting)
+                return NameEntrySaveOutcome::NeedReplace;
+
+            if (appContext.setProjectDisplayName != nullptr)
+                appContext.setProjectDisplayName(safeName);
+
+            const auto r = appContext.projectSerializer->saveProjectToFile(target,
+                                                                           appContext.pluginHostManager,
+                                                                           appContext.audioEngine);
+
+            if (r.failed())
+            {
+                Logger::warn("FORGE7: library save failed - " + r.getErrorMessage());
+                errorOut = r.getErrorMessage().isNotEmpty() ? r.getErrorMessage()
+                                                            : juce::String("Unknown error.");
+                return NameEntrySaveOutcome::Failed;
+            }
+
+            copyToLastSessionBackup(target);
+
+            if (appContext.appConfig != nullptr)
+            {
+                appContext.appConfig->setLastLoadedProjectPath(target.getFullPathName());
+                appContext.appConfig->saveToFile();
+            }
+
+            Logger::info("FORGE7: saved project to library - " + target.getFullPathName());
+
+            if (statusMessage)
+                statusMessage("Saved: " + safeName);
+
+            return NameEntrySaveOutcome::Success;
+        });
+}
+
+void runLoadProjectFromLibraryBrowser(juce::Component* modalParent,
+                                       AppContext& appContext,
+                                       std::function<void(const juce::String&)> statusMessage)
+{
+    if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
+        return;
+
+    const juce::Array<juce::File> files = listLibraryProjectFiles();
+
+    if (files.isEmpty())
+    {
+        juce::AlertWindow::showMessageBoxAsync(juce::MessageBoxIconType::InfoIcon,
+                                               "Load Project",
+                                               "No saved projects found in the FORGE7 library yet.",
+                                               "OK",
+                                               modalParent,
+                                               nullptr);
+        return;
+    }
+
+    juce::StringArray choices;
+
+    for (const auto& f : files)
+        choices.add(f.getFileNameWithoutExtension());
+
+    juce::AlertWindow w("Load Project", "Select a project:", juce::MessageBoxIconType::QuestionIcon, modalParent);
+    w.addComboBox("projectPick", choices, "Saved projects:");
+    w.addButton("Load", 1, juce::KeyPress(juce::KeyPress::returnKey));
+    w.addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+
+    if (w.runModalLoop() != 1)
+        return;
+
+    if (auto* cb = w.getComboBoxComponent("projectPick"))
+    {
+        const int idx = cb->getSelectedItemIndex();
+
+        if (! juce::isPositiveAndBelow(idx, files.size()))
+            return;
+
+        const juce::File f = files.getReference(idx);
+
+        const auto r = appContext.projectSerializer->loadProjectFromFile(f,
+                                                                           appContext.pluginHostManager,
+                                                                           appContext.audioEngine);
+
+        if (r.failed())
+        {
+            Logger::warn("FORGE7: load project failed - " + r.getErrorMessage());
+            showSimpleAlert(modalParent,
+                            "Load failed",
+                            r.getErrorMessage().isNotEmpty() ? r.getErrorMessage()
+                                                             : juce::String("Unknown error."));
+            return;
+        }
+
+        finishSuccessfulProjectLoad(appContext, f);
+        Logger::info("FORGE7: loaded project from library - " + f.getFullPathName());
+
+        if (statusMessage)
+            statusMessage("Loaded: " + f.getFileNameWithoutExtension());
+    }
+}
+
+void runExportProjectWithFileChooser(juce::Component* modalParent, AppContext& appContext)
+{
+    juce::ignoreUnused(modalParent);
+
+    if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
+        return;
+
+    AppContext* ctx = &appContext;
+
+    const juce::String suggestName =
+        ctx->getProjectDisplayName != nullptr ? ctx->getProjectDisplayName() : juce::String("Project");
+
+    auto chooser = std::make_shared<juce::FileChooser>("Export FORGE 7 project",
+                                                        juce::File::getSpecialLocation(juce::File::userDocumentsDirectory)
+                                                            .getChildFile(sanitizeLibraryItemName(suggestName)
+                                                                          + kForgeProjectExtension),
+                                                        "*.forgeproject;*.forge7.json");
+
+    chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
+                         [chooser, ctx](const juce::FileChooser& fc)
+                         {
+                             const juce::File f = fc.getResult();
+
+                             if (f == juce::File {} || ctx == nullptr || ctx->projectSerializer == nullptr)
+                                 return;
+
+                             const auto r = ctx->projectSerializer->saveProjectToFile(f,
+                                                                                      ctx->pluginHostManager,
+                                                                                      ctx->audioEngine);
+
+                             if (r.failed())
+                                 Logger::warn("FORGE7: export failed - " + r.getErrorMessage());
+                             else
+                                 Logger::info("FORGE7: exported project - " + f.getFullPathName());
+                         });
+}
+
+void runImportProjectWithFileChooser(juce::Component* modalParent, AppContext& appContext)
+{
+    juce::ignoreUnused(modalParent);
+
+    if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
+        return;
+
+    AppContext* ctx = &appContext;
+
+    auto chooser = std::make_shared<juce::FileChooser>("Import FORGE 7 project",
+                                                        juce::File {},
+                                                        "*.forgeproject;*.forge7.json");
+
+    chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                         [chooser, ctx](const juce::FileChooser& fc)
+                         {
+                             const juce::File f = fc.getResult();
+
+                             if (f == juce::File {} || ctx == nullptr || ctx->projectSerializer == nullptr)
+                                 return;
+
+                             const auto r = ctx->projectSerializer->loadProjectFromFile(f,
+                                                                                      ctx->pluginHostManager,
+                                                                                      ctx->audioEngine);
+
+                             if (r.failed())
+                             {
+                                 Logger::warn("FORGE7: import failed - " + r.getErrorMessage());
+                                 return;
+                             }
+
+                             finishSuccessfulProjectLoad(*ctx, f);
+                             Logger::info("FORGE7: imported project - " + f.getFullPathName());
+                         });
+}
+
+} // namespace forge7

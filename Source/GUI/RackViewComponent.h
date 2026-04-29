@@ -68,6 +68,11 @@ private:
     /** Move plugins left to eliminate leading-empty gaps while keeping contiguous order. Message thread only. */
     void compactChainLeadingGapsFromPluginLoads();
 
+    void promptAddChain();
+    void promptRenameActiveChain();
+    void promptAddScene();
+    void promptRenameActiveScene();
+
     std::vector<int> getVisiblePluginSlotIndices() const;
 
     [[nodiscard]] static bool rackSlotShowsContent(const SlotInfo& info) noexcept;
@@ -88,10 +93,18 @@ private:
     int selectionBeforePendingAdd { -1 };
     BrowserOpenReason browserOpenReason { BrowserOpenReason::None };
 
+    juce::Label projectHeaderLabel;
     juce::Label sceneTitleLabel;
-    juce::Label variationLabel;
+    juce::Label chainHeaderLabel;
     juce::Label editModeBadge;
     juce::Label tempoLabel;
+    juce::Label chainCountLabel;
+    juce::TextButton chainPrevButton { "Chain -" };
+    juce::TextButton chainNextButton { "Chain +" };
+    juce::TextButton addChainButton { "Add Chain" };
+    juce::TextButton renameChainButton { "Rename Chain" };
+    juce::TextButton addSceneButton { "Add Scene" };
+    juce::TextButton renameSceneButton { "Rename Scene" };
     std::unique_ptr<CpuMeter> cpuMeter;
     juce::ToggleButton globalBypassFxToggle { "Bypass FX" };
 
@@ -139,7 +152,6 @@ private:
     juce::TextButton ctxDetailButton { "Details" };
 
     juce::TextButton navPerformanceButton;
-    juce::TextButton navScenesButton;
     juce::TextButton settingsButton { "Settings" };
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW

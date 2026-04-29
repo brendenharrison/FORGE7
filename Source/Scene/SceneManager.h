@@ -61,6 +61,8 @@ public:
     /** Keeps at least one variation per scene. */
     bool deleteChainVariation(int variationIndex);
 
+    bool renameChainVariation(int variationIndex, const juce::String& newName);
+
     bool selectChainVariation(int variationIndex);
 
     /** Dedicated hardware: step variation within the active scene (wraps). */

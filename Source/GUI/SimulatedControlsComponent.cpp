@@ -8,6 +8,7 @@
 #include "../PluginHost/PluginChain.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
+#include "ProjectLibraryDialogs.h"
 #include "../Storage/ProjectSerializer.h"
 #include "../Utilities/Logger.h"
 
@@ -135,7 +136,7 @@ void SimulatedControlsComponent::resized()
 
     area.removeFromBottom(8);
 
-    auto shortcuts = area.removeFromBottom(118);
+    auto shortcuts = area.removeFromBottom(168);
     shortcutsHeading.setBounds(shortcuts.removeFromTop(18));
     shortcuts.removeFromTop(4);
 
@@ -148,6 +149,13 @@ void SimulatedControlsComponent::resized()
     shortcutInspector.setBounds(row2.removeFromLeft(juce::jmax(120, row2.getWidth() / 3)).reduced(2, 2));
     shortcutSave.setBounds(row2.removeFromLeft(juce::jmax(120, row2.getWidth() / 2)).reduced(2, 2));
     shortcutLoad.setBounds(row2.reduced(2, 2));
+
+    auto row3 = shortcuts.removeFromTop(34);
+    shortcutExportProject.setBounds(row3.removeFromLeft(juce::jmax(120, row3.getWidth() / 2)).reduced(2, 2));
+    shortcutImportProject.setBounds(row3.reduced(2, 2));
+
+    shortcuts.removeFromTop(6);
+    shortcutLibraryStatusLabel.setBounds(shortcuts);
 
     area.removeFromBottom(8);
 
@@ -277,6 +285,13 @@ void SimulatedControlsComponent::wireButtons()
         b.setColour(juce::TextButton::textColourOffId, text());
     };
 
+    shortcutLibraryStatusLabel.setJustificationType(juce::Justification::topLeft);
+    shortcutLibraryStatusLabel.setFont(juce::Font(11.0f));
+    shortcutLibraryStatusLabel.setColour(juce::Label::textColourId, muted());
+    shortcutLibraryStatusLabel.setText("Projects save to ~/Documents/FORGE7/Projects (name only).",
+                                       juce::dontSendNotification);
+    addAndMakeVisible(shortcutLibraryStatusLabel);
+
     for (auto* b : { &assign1Button,
                      &assign2Button,
                      &chainPrevButton,
@@ -290,7 +305,9 @@ void SimulatedControlsComponent::wireButtons()
                      &shortcutPluginBrowser,
                      &shortcutInspector,
                      &shortcutSave,
-                     &shortcutLoad })
+                     &shortcutLoad,
+                     &shortcutExportProject,
+                     &shortcutImportProject })
     {
         style(*b);
         addAndMakeVisible(*b);
@@ -361,77 +378,32 @@ void SimulatedControlsComponent::wireButtons()
 
     shortcutSave.onClick = [this]()
     {
-        if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
-            return;
-
-        auto chooser = std::make_shared<juce::FileChooser>("Save FORGE 7 project",
-                                                            juce::File {},
-                                                            "*.forge7.json");
-
-        chooser->launchAsync(juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles,
-                             [this, chooser](const juce::FileChooser& fc)
-                             {
-                                 const juce::File f = fc.getResult();
-
-                                 if (f == juce::File {})
-                                     return;
-
-                                 const auto r = appContext.projectSerializer->saveProjectToFile(
-                                     f,
-                                     appContext.pluginHostManager,
-                                     appContext.audioEngine);
-
-                                 if (r.failed())
-                                 {
-                                     Logger::warn("FORGE7: save project failed - " + r.getErrorMessage());
-                                     return;
-                                 }
-
-                                 if (appContext.appConfig != nullptr)
-                                 {
-                                     appContext.appConfig->setLastLoadedProjectPath(f.getFullPathName());
-                                     appContext.appConfig->saveToFile();
-                                 }
-                             });
+        runSaveProjectToLibraryDialog(this,
+                                      appContext,
+                                      [this](const juce::String& status)
+                                      {
+                                          shortcutLibraryStatusLabel.setText(status, juce::dontSendNotification);
+                                      });
     };
 
     shortcutLoad.onClick = [this]()
     {
-        if (appContext.projectSerializer == nullptr || appContext.pluginHostManager == nullptr)
-            return;
+        runLoadProjectFromLibraryBrowser(this,
+                                         appContext,
+                                         [this](const juce::String& status)
+                                         {
+                                             shortcutLibraryStatusLabel.setText(status, juce::dontSendNotification);
+                                         });
+    };
 
-        auto chooser = std::make_shared<juce::FileChooser>("Load FORGE 7 project",
-                                                            juce::File {},
-                                                            "*.forge7.json");
+    shortcutExportProject.onClick = [this]()
+    {
+        runExportProjectWithFileChooser(this, appContext);
+    };
 
-        chooser->launchAsync(juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
-                             [this, chooser](const juce::FileChooser& fc)
-                             {
-                                 const juce::File f = fc.getResult();
-
-                                 if (f == juce::File {})
-                                     return;
-
-                                 const auto r = appContext.projectSerializer->loadProjectFromFile(
-                                     f,
-                                     appContext.pluginHostManager,
-                                     appContext.audioEngine);
-
-                                 if (r.failed())
-                                 {
-                                     Logger::warn("FORGE7: load project failed - " + r.getErrorMessage());
-                                     return;
-                                 }
-
-                                 if (appContext.appConfig != nullptr)
-                                 {
-                                     appContext.appConfig->setLastLoadedProjectPath(f.getFullPathName());
-                                     appContext.appConfig->saveToFile();
-                                 }
-
-                                 if (appContext.mainComponent != nullptr && appContext.mainComponent->getRackView() != nullptr)
-                                     appContext.mainComponent->getRackView()->refreshAfterProjectHydration();
-                             });
+    shortcutImportProject.onClick = [this]()
+    {
+        runImportProjectWithFileChooser(this, appContext);
     };
 }
 
@@ -493,7 +465,7 @@ void SimulatedControlsComponent::timerCallback()
 void SimulatedControlsComponent::refreshDebugLabels()
 {
     juce::String sceneLine = "Scene: -";
-    juce::String varLine = "Variation: -";
+    juce::String chainLine = "Chain: -";
 
     if (appContext.sceneManager != nullptr)
     {
@@ -511,12 +483,19 @@ void SimulatedControlsComponent::refreshDebugLabels()
                              : juce::jlimit(0, static_cast<int>(vars.size()) - 1, sc.getActiveChainVariationIndex());
 
             if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
-                varLine = "Variation: " + vars[static_cast<size_t>(vi)]->getVariationName();
+            {
+                const juce::String name = vars[static_cast<size_t>(vi)]->getVariationName();
+                const int oneBased = vi + 1;
+                const juce::String idx = oneBased < 10 ? juce::String("0") + juce::String(oneBased)
+                                                       : juce::String(oneBased);
+                chainLine = "Chain: " + idx
+                            + (name.isNotEmpty() ? juce::String(" - ") + name : juce::String());
+            }
         }
     }
 
     sceneLabel.setText(sceneLine, juce::dontSendNotification);
-    variationLabel.setText(varLine, juce::dontSendNotification);
+    variationLabel.setText(chainLine, juce::dontSendNotification);
 
     juce::String ev = "Last event: ";
 

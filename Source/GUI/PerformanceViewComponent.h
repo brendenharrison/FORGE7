@@ -13,9 +13,9 @@ namespace forge7
 
 struct AppContext;
 
-/** Live performance screen: scene + chain variation, K1-K4, assigns, variation navigation,
+/** Live performance screen: shows Project / Scene / Chain hierarchy, K1-K4, assigns,
 
-    BPM/CPU - tuned for ~7\" embedded pedal use (minimal chrome). */
+    Chain - / Chain + navigation, BPM/CPU - tuned for ~7\" embedded pedal use. */
 class PerformanceViewComponent final : public juce::Component,
                                        private juce::Timer
 {
@@ -36,8 +36,8 @@ private:
     AppContext& appContext;
 
     juce::TextButton rackEditButton { "RACK" };
-    juce::TextButton chainPrevButton { "Var -" };
-    juce::TextButton chainNextButton { "Var +" };
+    juce::TextButton chainPrevButton { "Chain -" };
+    juce::TextButton chainNextButton { "Chain +" };
     juce::TextButton settingsButton { "Settings" };
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
@@ -48,9 +48,10 @@ private:
     juce::Label bpmStatusLabel;
     CpuMeter cpuMeter;
 
+    juce::Label projectNameLabel;
     juce::Label heroSceneLabel;
-    juce::Label variationLabel;
-    juce::Label chainVarIndexLabel;
+    juce::Label chainHeaderLabel;
+    juce::Label chainCountLabel;
 
     class KnobCard;
     std::array<std::unique_ptr<KnobCard>, 4> knobCards;

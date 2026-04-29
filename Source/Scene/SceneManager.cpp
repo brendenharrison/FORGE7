@@ -195,6 +195,25 @@ bool SceneManager::deleteChainVariation(int variationIndex)
     return true;
 }
 
+bool SceneManager::renameChainVariation(int variationIndex, const juce::String& newName)
+{
+    auto* scene = getActiveScene();
+
+    if (scene == nullptr)
+        return false;
+
+    auto& vars = scene->getVariations();
+
+    if (! juce::isPositiveAndBelow(variationIndex, static_cast<int>(vars.size())))
+        return false;
+
+    if (vars[static_cast<size_t>(variationIndex)] == nullptr)
+        return false;
+
+    vars[static_cast<size_t>(variationIndex)]->setVariationName(newName);
+    return true;
+}
+
 bool SceneManager::selectChainVariation(int variationIndex)
 {
     auto* scene = getActiveScene();

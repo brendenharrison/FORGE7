@@ -544,6 +544,8 @@ juce::var ParameterMappingManager::exportMappingsToVar() const
 
         o->setProperty("hardwareControlId", hardwareIdToKey(m.hardwareControlId));
         o->setProperty("sceneId", m.sceneId);
+        // v2: new user-facing key `chainId` plus legacy `chainVariationId` for older readers.
+        o->setProperty("chainId", m.chainVariationId);
         o->setProperty("chainVariationId", m.chainVariationId);
         o->setProperty("pluginSlotIndex", m.pluginSlotIndex);
         o->setProperty("pluginParameterId", m.pluginParameterId);
@@ -595,7 +597,10 @@ void ParameterMappingManager::importMappingsFromVar(const juce::var& data)
         ParameterMappingDescriptor m {};
         m.hardwareControlId = hid;
         m.sceneId = o->getProperty("sceneId").toString();
-        m.chainVariationId = o->getProperty("chainVariationId").toString();
+        // v2 prefers `chainId`; fall back to legacy `chainVariationId`.
+        m.chainVariationId = o->getProperty("chainId").toString();
+        if (m.chainVariationId.isEmpty())
+            m.chainVariationId = o->getProperty("chainVariationId").toString();
         m.pluginSlotIndex = static_cast<int>(o->getProperty("pluginSlotIndex"));
         m.pluginParameterId = o->getProperty("pluginParameterId").toString();
         m.pluginParameterIndex = o->hasProperty("pluginParameterIndex")

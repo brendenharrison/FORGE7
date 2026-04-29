@@ -11,9 +11,12 @@
 #include "../Audio/AudioEngine.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../PluginHost/PluginSlot.h"
+#include "../Scene/ChainVariation.h"
 #include "../Scene/SceneManager.h"
 #include "../Utilities/Logger.h"
 #include "CpuMeter.h"
+#include "NameEntryModal.h"
+#include "NavigationStatus.h"
 #include "PluginBrowserComponent.h"
 #include "PluginInspectorComponent.h"
 #include "RackSlotCard.h"
@@ -105,15 +108,76 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
     setOpaque(true);
 
+    projectHeaderLabel.setJustificationType(juce::Justification::centredLeft);
+    projectHeaderLabel.setFont(juce::Font(12.0f));
+    projectHeaderLabel.setColour(juce::Label::textColourId, rackMuted());
+    projectHeaderLabel.setMinimumHorizontalScale(0.75f);
+    addAndMakeVisible(projectHeaderLabel);
+
     sceneTitleLabel.setJustificationType(juce::Justification::centredLeft);
     sceneTitleLabel.setFont(juce::Font(17.0f));
     sceneTitleLabel.setColour(juce::Label::textColourId, rackText());
     addAndMakeVisible(sceneTitleLabel);
 
-    variationLabel.setJustificationType(juce::Justification::centredLeft);
-    variationLabel.setFont(juce::Font(15.0f));
-    variationLabel.setColour(juce::Label::textColourId, rackMuted());
-    addAndMakeVisible(variationLabel);
+    chainHeaderLabel.setJustificationType(juce::Justification::centredLeft);
+    chainHeaderLabel.setFont(juce::Font(15.0f));
+    chainHeaderLabel.setColour(juce::Label::textColourId, rackMuted());
+    addAndMakeVisible(chainHeaderLabel);
+
+    chainCountLabel.setJustificationType(juce::Justification::centred);
+    chainCountLabel.setFont(juce::Font(13.0f));
+    chainCountLabel.setColour(juce::Label::textColourId, rackMuted());
+    addAndMakeVisible(chainCountLabel);
+
+    auto wireChainNav = [this](juce::TextButton& b)
+    {
+        b.setColour(juce::TextButton::buttonColourId, rackSurface().brighter(0.08f));
+        b.setColour(juce::TextButton::textColourOffId, rackText());
+        b.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        addAndMakeVisible(b);
+    };
+
+    wireChainNav(chainPrevButton);
+    wireChainNav(chainNextButton);
+    wireChainNav(addChainButton);
+    wireChainNav(renameChainButton);
+    wireChainNav(addSceneButton);
+    wireChainNav(renameSceneButton);
+
+    chainPrevButton.onClick = [this]()
+    {
+        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+            return;
+
+        const int before = appContext.sceneManager->getActiveChainVariationIndex();
+        appContext.sceneManager->previousChainVariationWithCrossfade(*appContext.pluginHostManager);
+        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+
+        if (before == 0 && after != 0)
+            Logger::info("FORGE7: Chain - wrapped from first to last");
+
+        refreshSlotDisplays();
+    };
+
+    chainNextButton.onClick = [this]()
+    {
+        if (appContext.sceneManager == nullptr || appContext.pluginHostManager == nullptr)
+            return;
+
+        const int before = appContext.sceneManager->getActiveChainVariationIndex();
+        appContext.sceneManager->nextChainVariationWithCrossfade(*appContext.pluginHostManager);
+        const int after = appContext.sceneManager->getActiveChainVariationIndex();
+
+        if (after == 0 && before != 0)
+            Logger::info("FORGE7: Chain + wrapped from last to first");
+
+        refreshSlotDisplays();
+    };
+
+    addChainButton.onClick = [this]() { promptAddChain(); };
+    renameChainButton.onClick = [this]() { promptRenameActiveChain(); };
+    addSceneButton.onClick = [this]() { promptAddScene(); };
+    renameSceneButton.onClick = [this]() { promptRenameActiveScene(); };
 
     editModeBadge.setText("EDIT MODE", juce::dontSendNotification);
     editModeBadge.setJustificationType(juce::Justification::centred);
@@ -216,27 +280,17 @@ RackViewComponent::RackViewComponent(AppContext& context)
     addAndMakeVisible(chainViewport);
 
     navPerformanceButton.setButtonText("Performance");
-    navScenesButton.setButtonText("Scenes");
 
-    for (auto* b : { &navPerformanceButton, &navScenesButton })
     {
-        styleBottomNavButton(*b);
-        b->setMouseCursor(juce::MouseCursor::PointingHandCursor);
-        addAndMakeVisible(*b);
+        styleBottomNavButton(navPerformanceButton);
+        navPerformanceButton.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+        addAndMakeVisible(navPerformanceButton);
     }
 
     navPerformanceButton.onClick = [this]()
     {
         if (auto* main = findParentComponentOfClass<MainComponent>())
             main->setEditMode(false);
-    };
-
-    navScenesButton.onClick = []()
-    {
-        juce::AlertWindow::showMessageBoxAsync(juce::AlertWindow::InfoIcon,
-                                                 "Scenes",
-                                                 "Scene browser coming soon.",
-                                                 "OK");
     };
 
     auto wireCtxText = [this](juce::TextButton& b)
@@ -421,12 +475,18 @@ void RackViewComponent::resized()
 {
     auto area = getLocalBounds();
 
+    const int projectStripH = 18;
     const int statusH = 52;
+    const int chainNavH = 44;
     const int contextH = 50;
     const int bottomH = 52;
     const int pad = 8;
 
-    // Top: scene / variation / edit badge / tempo / global bypass / CPU
+    // Project header strip (small).
+    auto projectStrip = area.removeFromTop(projectStripH).reduced(pad, 0);
+    projectHeaderLabel.setBounds(projectStrip);
+
+    // Top: scene title / chain / edit badge / tempo / global bypass / CPU
     auto statusArea = area.removeFromTop(statusH).reduced(pad, 4);
 
     if (cpuMeter != nullptr)
@@ -449,22 +509,45 @@ void RackViewComponent::resized()
     statusArea.removeFromRight(8);
 #endif
 
-    const int varW = juce::jmin(200, juce::jmax(100, statusArea.getWidth() / 4));
-    variationLabel.setBounds(statusArea.removeFromRight(varW));
+    const int chainHeaderW = juce::jmin(260, juce::jmax(140, statusArea.getWidth() / 3));
+    chainHeaderLabel.setBounds(statusArea.removeFromRight(chainHeaderW));
     statusArea.removeFromRight(6);
     sceneTitleLabel.setBounds(statusArea);
 
     area.removeFromTop(4);
 
-    // Bottom: primary nav (Performance / Scenes) + settings
+    // Chain nav row: Chain - / count / Chain + / Add Chain / Rename Chain / Add Scene / Rename Scene
+    auto chainNavRow = area.removeFromTop(chainNavH).reduced(pad, 4);
+
+    const int navBtnW = 92;
+    const int gap = 6;
+
+    chainPrevButton.setBounds(chainNavRow.removeFromLeft(navBtnW).reduced(0, 2));
+    chainNavRow.removeFromLeft(gap);
+
+    chainCountLabel.setBounds(chainNavRow.removeFromLeft(110));
+    chainNavRow.removeFromLeft(gap);
+
+    chainNextButton.setBounds(chainNavRow.removeFromLeft(navBtnW).reduced(0, 2));
+    chainNavRow.removeFromLeft(gap * 2);
+
+    addChainButton.setBounds(chainNavRow.removeFromLeft(108).reduced(0, 2));
+    chainNavRow.removeFromLeft(gap);
+    renameChainButton.setBounds(chainNavRow.removeFromLeft(124).reduced(0, 2));
+    chainNavRow.removeFromLeft(gap * 2);
+    addSceneButton.setBounds(chainNavRow.removeFromLeft(108).reduced(0, 2));
+    chainNavRow.removeFromLeft(gap);
+    renameSceneButton.setBounds(chainNavRow.removeFromLeft(124).reduced(0, 2));
+
+    area.removeFromTop(4);
+
+    // Bottom: primary nav (Performance) + settings
     auto bottomArea = area.removeFromBottom(bottomH).reduced(pad, 4);
 
     settingsButton.setBounds(bottomArea.removeFromRight(100).reduced(0, 2));
     bottomArea.removeFromRight(8);
 
-    const int navHalf = juce::jmax(120, bottomArea.getWidth() / 2);
-    navPerformanceButton.setBounds(bottomArea.removeFromLeft(navHalf).reduced(4, 0));
-    navScenesButton.setBounds(bottomArea.reduced(4, 0));
+    navPerformanceButton.setBounds(bottomArea.reduced(4, 0));
 
     area.removeFromBottom(4);
 
@@ -676,38 +759,28 @@ void RackViewComponent::refreshSlotDisplays()
 
     compactChainLeadingGapsFromPluginLoads();
 
-    juce::String sceneLine = "Scene";
-    juce::String varLine = "Variation";
-    juce::String tempoLine = "- BPM";
+    const NavigationStatus nav = computeNavigationStatus(appContext);
 
-    if (appContext.sceneManager != nullptr)
-    {
-        const int si = appContext.sceneManager->getActiveSceneIndex();
-        const auto& scenes = appContext.sceneManager->getScenes();
+    juce::String sceneLine =
+        nav.hasActiveScene() ? "Scene " + juce::String(nav.sceneIndex + 1) + " - "
+                                   + (nav.sceneName.isNotEmpty() ? nav.sceneName : juce::String("Untitled"))
+                             : juce::String("Scene");
 
-        if (juce::isPositiveAndBelow(si, static_cast<int>(scenes.size())) && scenes[static_cast<size_t>(si)] != nullptr)
-        {
-            const auto& sc = *scenes[static_cast<size_t>(si)];
-            sceneLine = "Scene " + juce::String(si + 1) + " - " + sc.getSceneName();
+    const juce::String tempoLine =
+        nav.hasActiveScene() ? juce::String(nav.tempoBpm, 1) + " BPM" : juce::String("- BPM");
 
-            const auto& vars = sc.getVariations();
-
-            const int vi =
-                vars.empty() ? 0
-                             : juce::jlimit(0,
-                                            static_cast<int>(vars.size()) - 1,
-                                            sc.getActiveChainVariationIndex());
-
-            if (juce::isPositiveAndBelow(vi, static_cast<int>(vars.size())) && vars[static_cast<size_t>(vi)] != nullptr)
-                varLine = vars[static_cast<size_t>(vi)]->getVariationName();
-
-            tempoLine = juce::String(sc.getTempoBpm(), 1) + " BPM";
-        }
-    }
-
+    projectHeaderLabel.setText(nav.getProjectHeaderLine(), juce::dontSendNotification);
     sceneTitleLabel.setText(sceneLine, juce::dontSendNotification);
-    variationLabel.setText(varLine, juce::dontSendNotification);
+    chainHeaderLabel.setText(nav.getChainDisplayLabel(), juce::dontSendNotification);
+    chainCountLabel.setText(nav.getChainCountSummary(), juce::dontSendNotification);
     tempoLabel.setText(tempoLine, juce::dontSendNotification);
+
+    chainPrevButton.setEnabled(nav.chainCount > 0);
+    chainNextButton.setEnabled(nav.chainCount > 0);
+    addChainButton.setEnabled(appContext.sceneManager != nullptr);
+    renameChainButton.setEnabled(nav.hasActiveChain());
+    addSceneButton.setEnabled(appContext.sceneManager != nullptr);
+    renameSceneButton.setEnabled(nav.hasActiveScene());
 
     for (int i = 0; i < kPluginChainMaxSlots; ++i)
     {
@@ -981,6 +1054,13 @@ void RackViewComponent::syncEncoderFocus()
     if (addPluginCard != nullptr && addPluginCard->isVisible())
         items.push_back({ addPluginCard.get(), [this]() { if (addPluginCard != nullptr) addPluginCard->onAddClicked(); }, {} });
 
+    items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
+    items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });
+    items.push_back({ &addChainButton, [this]() { addChainButton.triggerClick(); }, {} });
+    items.push_back({ &renameChainButton, [this]() { renameChainButton.triggerClick(); }, {} });
+    items.push_back({ &addSceneButton, [this]() { addSceneButton.triggerClick(); }, {} });
+    items.push_back({ &renameSceneButton, [this]() { renameSceneButton.triggerClick(); }, {} });
+
     items.push_back({ &ctxMoveLeftButton, [this]() { ctxMoveLeftButton.triggerClick(); }, {} });
     items.push_back({ &ctxMoveRightButton, [this]() { ctxMoveRightButton.triggerClick(); }, {} });
     items.push_back({ &ctxBypassToggle, [this]() { ctxBypassToggle.triggerClick(); }, {} });
@@ -990,7 +1070,6 @@ void RackViewComponent::syncEncoderFocus()
     items.push_back({ &ctxDetailButton, [this]() { ctxDetailButton.triggerClick(); }, {} });
     items.push_back({ &globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, {} });
     items.push_back({ &navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, {} });
-    items.push_back({ &navScenesButton, [this]() { navScenesButton.triggerClick(); }, {} });
     items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
@@ -1143,6 +1222,122 @@ void RackViewComponent::compactChainLeadingGapsFromPluginLoads()
             }
         }
     }
+}
+
+void RackViewComponent::promptAddChain()
+{
+    if (appContext.sceneManager == nullptr)
+        return;
+
+    NameEntryModal::showPlainDialog(
+        appContext,
+        "New Chain",
+        {},
+        [this](const juce::String& enteredName)
+        {
+            if (appContext.sceneManager == nullptr)
+                return;
+
+            const juce::String trimmed = enteredName.trim();
+            const juce::String id = appContext.sceneManager->createChainVariation(trimmed);
+
+            if (id.isEmpty())
+                Logger::warn("FORGE7: createChainVariation returned empty id");
+
+            if (appContext.pluginHostManager != nullptr)
+                appContext.pluginHostManager->commitChainVariationCrossfade(*appContext.sceneManager);
+
+            refreshSlotDisplays();
+            syncEncoderFocus();
+        });
+}
+
+void RackViewComponent::promptRenameActiveChain()
+{
+    if (appContext.sceneManager == nullptr)
+        return;
+
+    auto* scene = appContext.sceneManager->getActiveScene();
+
+    if (scene == nullptr)
+        return;
+
+    const int idx = scene->getActiveChainVariationIndex();
+    auto& vars = scene->getVariations();
+
+    if (! juce::isPositiveAndBelow(idx, static_cast<int>(vars.size())) || vars[static_cast<size_t>(idx)] == nullptr)
+        return;
+
+    const juce::String currentName = vars[static_cast<size_t>(idx)]->getVariationName();
+
+    NameEntryModal::showPlainDialog(
+        appContext,
+        "Rename Chain",
+        currentName,
+        [this, idx](const juce::String& enteredName)
+        {
+            if (appContext.sceneManager == nullptr)
+                return;
+
+            appContext.sceneManager->renameChainVariation(idx, enteredName.trim());
+            refreshSlotDisplays();
+            syncEncoderFocus();
+        });
+}
+
+void RackViewComponent::promptAddScene()
+{
+    if (appContext.sceneManager == nullptr)
+        return;
+
+    NameEntryModal::showPlainDialog(
+        appContext,
+        "New Scene",
+        {},
+        [this](const juce::String& enteredName)
+        {
+            if (appContext.sceneManager == nullptr)
+                return;
+
+            const juce::String id = appContext.sceneManager->createScene(enteredName.trim());
+
+            if (id.isEmpty())
+                Logger::warn("FORGE7: createScene returned empty id");
+
+            if (appContext.pluginHostManager != nullptr)
+                appContext.pluginHostManager->commitChainVariationCrossfade(*appContext.sceneManager);
+
+            refreshSlotDisplays();
+            syncEncoderFocus();
+        });
+}
+
+void RackViewComponent::promptRenameActiveScene()
+{
+    if (appContext.sceneManager == nullptr)
+        return;
+
+    const int idx = appContext.sceneManager->getActiveSceneIndex();
+    auto* scene = appContext.sceneManager->getActiveScene();
+
+    if (scene == nullptr)
+        return;
+
+    const juce::String currentName = scene->getSceneName();
+
+    NameEntryModal::showPlainDialog(
+        appContext,
+        "Rename Scene",
+        currentName,
+        [this, idx](const juce::String& enteredName)
+        {
+            if (appContext.sceneManager == nullptr)
+                return;
+
+            appContext.sceneManager->renameScene(idx, enteredName.trim());
+            refreshSlotDisplays();
+            syncEncoderFocus();
+        });
 }
 
 std::vector<int> RackViewComponent::getVisiblePluginSlotIndices() const

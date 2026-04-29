@@ -1,5 +1,17 @@
 # FORGE7
 
+FORGE7 is an embedded touchscreen guitar pedal. Projects are organized as:
+
+**Project > Scenes > Chains**
+
+- **Project** - artist/band/performance context. Holds a name and one or more Scenes.
+- **Scene** - one song. Has a name, tempo, and an ordered list of Chains.
+- **Chain** - a sound/section within a Scene (e.g. Intro, Verse, Chorus, Solo). Holds the plugin chain, plugin states, bypass states, and K1-K4 mappings.
+
+Chain navigation uses the dedicated **Chain -** / **Chain +** controls (which wrap when reaching the first/last chain in the active scene).
+
+> Internal class names (e.g. `ChainVariation`) still use the legacy "variation" terminology in V1; user-facing UI uses **Chain**.
+
 ## ASCII-only UI text policy (temporary)
 
 FORGE7 currently keeps all visible UI strings ASCII-only to avoid UTF-8/mojibake issues across macOS, Linux, and embedded builds.

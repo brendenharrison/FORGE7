@@ -138,6 +138,10 @@ void EncoderNavigator::encoderNavigationEvent(const HardwareControlEvent& event)
 
     if (event.id == HardwareControlId::EncoderLongPress)
     {
+        if (appContext != nullptr && appContext->tryConsumeEncoderLongPress != nullptr
+            && appContext->tryConsumeEncoderLongPress())
+            return;
+
         if (escapeHandler != nullptr)
             escapeHandler();
     }

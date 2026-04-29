@@ -59,6 +59,9 @@ private:
     juce::TextButton shortcutInspector { "Open Inspector (selected)" };
     juce::TextButton shortcutSave { "Save Project" };
     juce::TextButton shortcutLoad { "Load Project" };
+    juce::TextButton shortcutExportProject { "Export Project..." };
+    juce::TextButton shortcutImportProject { "Import Project..." };
+    juce::Label shortcutLibraryStatusLabel;
 
     juce::Label debugHeading { {}, "Status" };
     juce::Label sceneLabel;
