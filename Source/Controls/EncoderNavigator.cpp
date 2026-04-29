@@ -1,6 +1,7 @@
 #include "EncoderNavigator.h"
 
 #include "../App/AppContext.h"
+#include "../Utilities/Logger.h"
 #include "ControlManager.h"
 
 namespace forge7
@@ -49,6 +50,11 @@ void EncoderNavigator::attachContext(AppContext* context) noexcept
     {
         attachedControlManager = appContext->controlManager;
         attachedControlManager->addListener(this);
+        Logger::info("FORGE7 EncoderNavigator: attached to ControlManager");
+    }
+    else if (appContext != nullptr && appContext->controlManager == nullptr)
+    {
+        Logger::error("FORGE7 EncoderNavigator: attachContext skipped - AppContext.controlManager is null");
     }
 }
 
@@ -138,6 +144,8 @@ void EncoderNavigator::encoderNavigationEvent(const HardwareControlEvent& event)
 
     if (event.id == HardwareControlId::EncoderLongPress)
     {
+        Logger::info("FORGE7 EncoderNavigator: EncoderLongPress received");
+
         if (appContext != nullptr && appContext->tryConsumeEncoderLongPress != nullptr
             && appContext->tryConsumeEncoderLongPress())
             return;

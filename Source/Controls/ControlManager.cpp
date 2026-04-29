@@ -11,6 +11,27 @@
 
 namespace forge7
 {
+namespace
+{
+juce::String hardwareControlSourceDebugName(HardwareControlSource source) noexcept
+{
+    switch (source)
+    {
+        case HardwareControlSource::Midi:
+            return "Midi";
+        case HardwareControlSource::SimulatedKeyboard:
+            return "SimulatedKeyboard";
+        case HardwareControlSource::SimulatedGui:
+            return "SimulatedGui";
+        case HardwareControlSource::UsbSerial:
+            return "UsbSerial";
+        case HardwareControlSource::FutureGpio:
+            return "FutureGpio";
+        default:
+            return "Unknown";
+    }
+}
+} // namespace
 
 ControlManager::ControlManager(ParameterMappingManager& mappingManager)
     : parameterMappingManager(mappingManager)
@@ -155,6 +176,12 @@ void ControlManager::submitHardwareEvent(HardwareControlEvent event)
     /** Mapping, scene hydration, and listeners require the message thread - bundle so order is fixed. */
     auto deliver = [this, event]()
     {
+        if (event.id == HardwareControlId::EncoderLongPress)
+        {
+            Logger::info("FORGE7 ControlManager: EncoderLongPress received source="
+                         + hardwareControlSourceDebugName(event.source));
+        }
+
         routeThroughMappingStub(event);
         invokeSceneNavigationIfAttached(event);
         notifyListeners(event);

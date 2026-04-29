@@ -274,6 +274,9 @@ void SimulatedControlsComponent::emitEncoderPress(const HardwareControlId pressO
     lastEmittedValue = e.value;
     lastEmittedExtra = {};
 
+    if (pressOrLong == HardwareControlId::EncoderLongPress)
+        Logger::info("FORGE7 SimHW: EncoderLongPress emitted");
+
     appContext.controlManager->submitHardwareEvent(e);
 }
 

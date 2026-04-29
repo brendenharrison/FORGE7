@@ -107,6 +107,7 @@ MainComponent::MainComponent(AppContext& context)
     {
         return handleGlobalEncoderLongPress();
     };
+    Logger::info("FORGE7 MainComponent: registered global encoder long press handler");
 }
 
 MainComponent::~MainComponent()
@@ -392,8 +393,11 @@ bool MainComponent::isProjectSceneJumpBrowserOpen() const noexcept
 
 bool MainComponent::handleGlobalEncoderLongPress()
 {
+    Logger::info("FORGE7 MainComponent: tryConsumeEncoderLongPress called");
+
     if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
     {
+        Logger::info("FORGE7 JumpBrowser: close from encoder long press");
         closeProjectSceneJumpBrowser();
         return true;
     }
@@ -416,14 +420,7 @@ bool MainComponent::handleGlobalEncoderLongPress()
         return true;
     }
 
-#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
-    if (simulatedControlsPanelVisible)
-    {
-        hideSimulatedControlsPanel();
-        return true;
-    }
-#endif
-
+    Logger::info("FORGE7 JumpBrowser: open from encoder long press");
     showProjectSceneJumpBrowser();
     return true;
 }
