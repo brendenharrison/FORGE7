@@ -14,6 +14,8 @@
 #include "../Controls/HardwareControlTypes.h"
 #include "../Controls/ParameterMappingDescriptor.h"
 #include "../Controls/ParameterMappingManager.h"
+#include "../PluginHost/PluginChain.h"
+#include "../PluginHost/PluginSlot.h"
 #include "../Scene/ChainVariation.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
@@ -442,37 +444,107 @@ void PerformanceViewComponent::refreshHud()
     bpmStatusLabel.setText(bpmLine, juce::dontSendNotification);
     chainCountLabel.setText(nav.getChainCountSummary(), juce::dontSendNotification);
 
-    if (appContext.controlManager != nullptr)
+    if (appContext.parameterMappingManager != nullptr)
     {
-        const auto& hw = appContext.controlManager->getHardwareState();
-
         for (int k = 0; k < 4; ++k)
         {
             if (knobCards[static_cast<size_t>(k)] == nullptr)
                 continue;
 
-            const float norm = hw.getKnobNormalized(k);
-            knobCards[static_cast<size_t>(k)]->setNormalized(norm);
+            if (mapKnob[k] == nullptr)
+            {
+                knobCards[static_cast<size_t>(k)]->setParameterTitle("K"
+                                                                     + juce::String(k + 1)
+                                                                     + " Unassigned");
+                knobCards[static_cast<size_t>(k)]->setNormalized(0.0f);
+                knobCards[static_cast<size_t>(k)]->setValueText("--");
+                continue;
+            }
 
-            juce::String title = "K" + juce::String(k + 1);
+            float pluginNorm01 = 0.0f;
 
-            if (mapKnob[k] != nullptr && mapKnob[k]->displayName.isNotEmpty())
-                title = mapKnob[k]->displayName;
+            if (! appContext.parameterMappingManager->tryReadMappedParameterNormalized(*mapKnob[k], pluginNorm01))
+            {
+                knobCards[static_cast<size_t>(k)]->setParameterTitle(mapKnob[k]->displayName.isNotEmpty()
+                                                                          ? mapKnob[k]->displayName
+                                                                          : juce::String("K") + juce::String(k + 1));
+                knobCards[static_cast<size_t>(k)]->setNormalized(0.0f);
+                knobCards[static_cast<size_t>(k)]->setValueText("--");
+                continue;
+            }
+
+            const float arc =
+                ParameterMappingManager::hardwareArc01ForHud(*mapKnob[k], pluginNorm01);
+
+            knobCards[static_cast<size_t>(k)]->setNormalized(arc);
+
+            juce::String title =
+                mapKnob[k]->displayName.isNotEmpty()
+                    ? mapKnob[k]->displayName
+                    : juce::String("K") + juce::String(k + 1);
 
             knobCards[static_cast<size_t>(k)]->setParameterTitle(title);
 
-            juce::String valueLine = juce::String(juce::roundToInt(norm * 100.0f)) + "%";
+            juce::String valueLine = juce::String(juce::roundToInt(arc * 100.0f)) + "%";
+            const juce::String hostText =
+                appContext.parameterMappingManager->getMappedParameterValueText(*mapKnob[k]);
 
-            if (mapKnob[k] != nullptr && appContext.parameterMappingManager != nullptr)
-            {
-                const juce::String hostText =
-                    appContext.parameterMappingManager->getMappedParameterValueText(*mapKnob[k]);
-
-                if (hostText.isNotEmpty())
-                    valueLine = hostText;
-            }
+            if (hostText.isNotEmpty())
+                valueLine = hostText;
 
             knobCards[static_cast<size_t>(k)]->setValueText(valueLine);
+        }
+
+        const juce::String logKey = nav.sceneId + "|" + nav.chainId;
+
+        if (logKey != lastAssignablesHudLogKey)
+        {
+            lastAssignablesHudLogKey = logKey;
+
+            Logger::info("FORGE7 Assignables: refreshing display from active chain");
+
+            juce::Array<ParameterMappingDescriptor> rowsForLog =
+                appContext.parameterMappingManager->getAllMappings();
+
+            auto* pluginChain =
+                appContext.pluginHostManager != nullptr ? appContext.pluginHostManager->getPluginChain() : nullptr;
+
+            for (int k = 0; k < 4; ++k)
+            {
+                const auto hid =
+                    static_cast<HardwareControlId>(static_cast<int>(HardwareControlId::Knob1) + k);
+                const auto* row = findMappingFor(rowsForLog, nav.sceneId, nav.chainId, hid);
+
+                if (row == nullptr)
+                {
+                    Logger::info("FORGE7 Assignables: K" + juce::String(k + 1) + " unassigned");
+                    continue;
+                }
+
+                float v = 0.0f;
+                appContext.parameterMappingManager->tryReadMappedParameterNormalized(*row, v);
+
+                juce::String plugName = "-";
+
+                if (pluginChain != nullptr)
+                    if (auto* sl = pluginChain->getSlot(static_cast<size_t>(row->pluginSlotIndex)))
+                        plugName = sl->getPluginDescription().name;
+
+                Logger::info("FORGE7 Assignables: K" + juce::String(k + 1) + " mapped plugin=\"" + plugName
+                             + "\" param=\"" + row->displayName + "\" value=" + juce::String(v, 3));
+            }
+        }
+    }
+    else
+    {
+        for (size_t k = 0; k < knobCards.size(); ++k)
+        {
+            if (knobCards[k] == nullptr)
+                continue;
+
+            knobCards[k]->setParameterTitle("K" + juce::String(static_cast<int>(k) + 1) + " Unassigned");
+            knobCards[k]->setNormalized(0.0f);
+            knobCards[k]->setValueText("--");
         }
     }
 

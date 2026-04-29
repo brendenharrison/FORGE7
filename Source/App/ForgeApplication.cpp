@@ -148,6 +148,12 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                 if (projectSession != nullptr)
                     projectSession->markProjectDirty();
             });
+        parameterMappingManager->setOnLivePluginParameterAdjustedFromHardware(
+            [this]()
+            {
+                if (projectSession != nullptr)
+                    projectSession->markProjectDirty();
+            });
     }
 
     appContext.audioEngine = audioEngine.get();

@@ -53,6 +53,9 @@ void AppConfig::seedDefaults()
     /** When true (and `FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW` is 1), opens DevToolsWindow at startup. */
     o->setProperty("showSimulatedControls", true);
 
+    /** Dev-only: default off - normal Sim HW sends relative deltas for assignable knobs. */
+    o->setProperty("simDevAbsoluteKnobTest", false);
+
     settings = juce::var(o);
 }
 
@@ -69,6 +72,21 @@ bool AppConfig::getShowSimulatedControls() const noexcept
     }
 
     return true;
+}
+
+bool AppConfig::getSimDevAbsoluteKnobTest() const noexcept
+{
+    if (auto* o = settings.getDynamicObject())
+    {
+        const juce::var v = o->getProperty("simDevAbsoluteKnobTest");
+
+        if (v.isVoid() || v.isUndefined())
+            return false;
+
+        return static_cast<bool>(v);
+    }
+
+    return false;
 }
 
 bool AppConfig::loadOrCreateDefaults()

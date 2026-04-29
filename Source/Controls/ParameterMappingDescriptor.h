@@ -15,7 +15,8 @@ namespace forge7
     next parameter gesture from `AudioProcessorEditor` / attachment - see `ParameterMappingManager::armLearnTargetForHardware`.
 
     **Value scaling**
-    - Knobs: hardware sends normalized 0...1 (`HardwareControlType::AbsoluteNormalized`). We map linearly
+    - Knobs: product uses relative encoder deltas (`HardwareControlType::RelativeDelta`); optional dev/legacy
+      absolute 0...1 (`HardwareControlType::AbsoluteNormalized`) for MIDI pots or tests. Linearly
       into `[minValue, maxValue]` where both are **plugin-normalized** 0...1 (`AudioProcessorParameter`
       domain), then apply `invert` to the hardware side before scaling.
 

@@ -80,6 +80,7 @@ void ControlManager::applyEventToState(const HardwareControlEvent& e)
             {
                 hardwareState.addEncoderDetents(juce::roundToInt(e.value));
             }
+            /** K1-K4 relative: no mirror in `HardwareControlState` (display follows plugin). */
             break;
 
         case HardwareControlType::ButtonPressed:
@@ -106,6 +107,12 @@ void ControlManager::applyEventToState(const HardwareControlEvent& e)
 void ControlManager::routeThroughMappingStub(const HardwareControlEvent& e)
 {
     /** Knobs + assign buttons only - chain/navigation handled elsewhere (`invokeSceneNavigationIfAttached`). */
+    if (e.type == HardwareControlType::RelativeDelta && isKnobId(e.id))
+    {
+        parameterMappingManager.processHardwareEvent(e);
+        return;
+    }
+
     if (e.type == HardwareControlType::AbsoluteNormalized && isKnobId(e.id))
     {
         parameterMappingManager.processHardwareEvent(e);

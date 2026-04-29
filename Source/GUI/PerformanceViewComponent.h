@@ -69,6 +69,9 @@ private:
 
     AudioHealthMonitor audioHealthMonitor;
 
+    /** When scene|chain navigation changes, knob mapping debug logs once (not timer-spammed). */
+    juce::String lastAssignablesHudLogKey;
+
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PerformanceViewComponent)
 };
 

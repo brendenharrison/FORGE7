@@ -31,14 +31,23 @@ private:
     void timerCallback() override;
     void sliderValueChanged(juce::Slider* slider) override;
 
-    void emitKnob(HardwareControlId id, float normalized01);
+    void emitKnobAbsoluteForDevTools(HardwareControlId id, float normalized01);
+
+    /** `deltaNormalized` moves the mapped plugin parameter in normalized 0...1 space (typ. +/-0.01). */
+    void emitKnobRelativeDelta(const HardwareControlId id, float pluginNormalizedDelta);
+
+    void refreshAssignableKnobDisplaysFromPluginState();
+
     void emitEncoderDelta(int delta);
     void emitEncoderPress(HardwareControlId pressOrLong);
 
     AppContext& appContext;
 
     std::array<juce::Slider, 4> knobs {};
+    std::array<juce::Label, 4> knobRelLabels {};
     std::array<juce::Label, 4> knobValueLabels {};
+    std::array<juce::TextButton, 4> knobDownButtons {};
+    std::array<juce::TextButton, 4> knobUpButtons {};
 
     juce::TextButton assign1Button { "Assign 1" };
     juce::TextButton assign2Button { "Assign 2" };

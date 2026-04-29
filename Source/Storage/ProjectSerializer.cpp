@@ -324,7 +324,12 @@ void ProjectSerializer::hydrateActiveVariationIntoHost(PluginHostManager& host)
     if (chain == nullptr)
         return;
 
+    parameterMappingManager.setSuppressAssignableKnobParameterWrites(true);
+    Logger::info("FORGE7 Assignables: suppressing hardware echo during hydration");
+
     host.hydratePluginChainFromChainVariation(*chain, *variation);
+
+    parameterMappingManager.setSuppressAssignableKnobParameterWrites(false);
 }
 
 juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file,

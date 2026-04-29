@@ -1,9 +1,14 @@
 #include "SimulatedControlsComponent.h"
 
+#include <cmath>
+
 #include "../App/AppConfig.h"
 #include "../App/AppContext.h"
 #include "../App/MainComponent.h"
 #include "../Controls/ControlManager.h"
+#include "../Controls/HardwareControlTypes.h"
+#include "../Controls/ParameterMappingDescriptor.h"
+#include "../Controls/ParameterMappingManager.h"
 #include "../GUI/RackViewComponent.h"
 #include "../PluginHost/PluginChain.h"
 #include "../Scene/Scene.h"
@@ -11,6 +16,7 @@
 #include "ProjectLibraryDialogs.h"
 #include "../Storage/ProjectSerializer.h"
 #include "../Utilities/Logger.h"
+#include "NavigationStatus.h"
 
 namespace forge7
 {
@@ -35,6 +41,24 @@ HardwareControlId knobIdForIndex(const int i) noexcept
             return HardwareControlId::Knob4;
     }
 }
+
+const ParameterMappingDescriptor* findKnobMappingFor(const juce::Array<ParameterMappingDescriptor>& rows,
+                                                     const juce::String& sceneId,
+                                                     const juce::String& variationId,
+                                                     const HardwareControlId hid)
+{
+    for (const auto& row : rows)
+    {
+        if (row.hardwareControlId != hid)
+            continue;
+
+        if (row.sceneId == sceneId && row.chainVariationId == variationId)
+            return &row;
+    }
+
+    return nullptr;
+}
+
 } // namespace
 
 SimulatedControlsComponent::SimulatedControlsComponent(AppContext& context)
@@ -57,11 +81,43 @@ SimulatedControlsComponent::SimulatedControlsComponent(AppContext& context)
         s.addListener(this);
         addAndMakeVisible(s);
 
+        knobRelLabels[static_cast<size_t>(i)].setJustificationType(juce::Justification::centred);
+        knobRelLabels[static_cast<size_t>(i)].setFont(juce::Font(12.0f));
+        knobRelLabels[static_cast<size_t>(i)].setColour(juce::Label::textColourId, text());
+        knobRelLabels[static_cast<size_t>(i)].setText("K" + juce::String(i + 1) + " rel",
+                                                      juce::dontSendNotification);
+        addAndMakeVisible(knobRelLabels[static_cast<size_t>(i)]);
+
         knobValueLabels[static_cast<size_t>(i)].setJustificationType(juce::Justification::centred);
         knobValueLabels[static_cast<size_t>(i)].setFont(juce::Font(11.0f));
         knobValueLabels[static_cast<size_t>(i)].setColour(juce::Label::textColourId, muted());
+        knobValueLabels[static_cast<size_t>(i)].setText("--", juce::dontSendNotification);
         addAndMakeVisible(knobValueLabels[static_cast<size_t>(i)]);
+
+        knobDownButtons[static_cast<size_t>(i)].setButtonText("-");
+        knobUpButtons[static_cast<size_t>(i)].setButtonText("+");
+
+        knobDownButtons[static_cast<size_t>(i)].setColour(juce::TextButton::buttonColourId, panelBg().brighter(0.12f));
+        knobDownButtons[static_cast<size_t>(i)].setColour(juce::TextButton::textColourOffId, text());
+        knobUpButtons[static_cast<size_t>(i)].setColour(juce::TextButton::buttonColourId, panelBg().brighter(0.12f));
+        knobUpButtons[static_cast<size_t>(i)].setColour(juce::TextButton::textColourOffId, text());
+
+        const int idx = i;
+        knobDownButtons[static_cast<size_t>(idx)].onClick = [this, idx]()
+        {
+            emitKnobRelativeDelta(knobIdForIndex(idx), -0.01f);
+        };
+
+        knobUpButtons[static_cast<size_t>(idx)].onClick = [this, idx]()
+        {
+            emitKnobRelativeDelta(knobIdForIndex(idx), 0.01f);
+        };
+
+        addAndMakeVisible(knobDownButtons[static_cast<size_t>(i)]);
+        addAndMakeVisible(knobUpButtons[static_cast<size_t>(i)]);
     }
+
+    refreshAssignableKnobDisplaysFromPluginState();
 
     shortcutsHeading.setJustificationType(juce::Justification::centredLeft);
     shortcutsHeading.setFont(juce::Font(13.0f));
@@ -181,16 +237,31 @@ void SimulatedControlsComponent::resized()
 
     area.removeFromBottom(8);
 
-    auto knobsRow = area.removeFromTop(120);
-    const int kw = juce::jmax(56, knobsRow.getWidth() / 4);
+    auto knobsRow = area.removeFromTop(164);
+    const int kw = juce::jmax(64, knobsRow.getWidth() / 4);
 
     for (int i = 0; i < 4; ++i)
     {
-        auto slice = knobsRow.removeFromLeft(kw);
-        knobs[static_cast<size_t>(i)].setBounds(slice.removeFromTop(88));
-        knobValueLabels[static_cast<size_t>(i)].setBounds(slice.removeFromTop(22));
+        auto col = knobsRow.removeFromLeft(kw).reduced(2, 0);
         knobsRow.removeFromLeft(4);
+
+        knobRelLabels[static_cast<size_t>(i)].setBounds(col.removeFromTop(18));
+        col.removeFromTop(2);
+        knobValueLabels[static_cast<size_t>(i)].setBounds(col.removeFromTop(22));
+
+        auto btnRow = col.removeFromTop(28);
+        knobDownButtons[static_cast<size_t>(i)].setBounds(btnRow.removeFromLeft(btnRow.getWidth() / 2).reduced(2, 2));
+        knobUpButtons[static_cast<size_t>(i)].setBounds(btnRow.reduced(2, 2));
+
+        col.removeFromTop(4);
+
+        if (appContext.appConfig != nullptr && appContext.appConfig->getSimDevAbsoluteKnobTest())
+            knobs[static_cast<size_t>(i)].setBounds(col.removeFromTop(88));
+        else
+            knobs[static_cast<size_t>(i)].setBounds({});
     }
+
+    refreshAssignableKnobDisplaysFromPluginState();
 }
 
 void SimulatedControlsComponent::sliderValueChanged(juce::Slider* slider)
@@ -198,19 +269,85 @@ void SimulatedControlsComponent::sliderValueChanged(juce::Slider* slider)
     if (appContext.controlManager == nullptr)
         return;
 
+    if (appContext.appConfig == nullptr || ! appContext.appConfig->getSimDevAbsoluteKnobTest())
+        return;
+
     for (int i = 0; i < 4; ++i)
     {
         if (slider == &knobs[static_cast<size_t>(i)])
         {
-            emitKnob(knobIdForIndex(i), static_cast<float>(slider->getValue()));
+            emitKnobAbsoluteForDevTools(knobIdForIndex(i), static_cast<float>(slider->getValue()));
             knobValueLabels[static_cast<size_t>(i)].setText(juce::String(slider->getValue(), 3),
-                                                             juce::dontSendNotification);
+                                                              juce::dontSendNotification);
             return;
         }
     }
 }
 
-void SimulatedControlsComponent::emitKnob(const HardwareControlId id, const float normalized01)
+void SimulatedControlsComponent::emitKnobRelativeDelta(const HardwareControlId id,
+                                                       const float pluginNormalizedDelta)
+{
+    if (appContext.controlManager == nullptr)
+        return;
+
+    if (std::abs(pluginNormalizedDelta) <= 0.0f)
+        return;
+
+    HardwareControlEvent e {};
+    e.id = id;
+    e.type = HardwareControlType::RelativeDelta;
+    e.source = HardwareControlSource::SimulatedGui;
+    e.value = juce::jlimit(-0.5f, 0.5f, pluginNormalizedDelta);
+
+    lastEmittedId = id;
+    lastEmittedValue = e.value;
+    lastEmittedExtra = "rel";
+
+    appContext.controlManager->submitHardwareEvent(e);
+}
+
+void SimulatedControlsComponent::refreshAssignableKnobDisplaysFromPluginState()
+{
+    const bool dev = appContext.appConfig != nullptr && appContext.appConfig->getSimDevAbsoluteKnobTest();
+
+    for (int i = 0; i < 4; ++i)
+        knobs[static_cast<size_t>(i)].setVisible(dev);
+
+    if (appContext.parameterMappingManager == nullptr || appContext.sceneManager == nullptr)
+        return;
+
+    const NavigationStatus nav = computeNavigationStatus(appContext);
+    const juce::Array<ParameterMappingDescriptor> rows = appContext.parameterMappingManager->getAllMappings();
+
+    for (int k = 0; k < 4; ++k)
+    {
+        const auto hid = knobIdForIndex(k);
+        const auto* row = findKnobMappingFor(rows, nav.sceneId, nav.chainId, hid);
+        juce::String line = "--";
+
+        if (row != nullptr)
+        {
+            float p01 = 0.0f;
+
+            if (appContext.parameterMappingManager->tryReadMappedParameterNormalized(*row, p01))
+            {
+                const float arc = ParameterMappingManager::hardwareArc01ForHud(*row, p01);
+                const juce::String vt =
+                    appContext.parameterMappingManager->getMappedParameterValueText(*row);
+
+                line = vt.isNotEmpty() ? vt : (juce::String(juce::roundToInt(arc * 100.0f)) + "%");
+
+                if (dev)
+                    knobs[static_cast<size_t>(k)].setValue(static_cast<double>(arc),
+                                                           juce::dontSendNotification);
+            }
+        }
+
+        knobValueLabels[static_cast<size_t>(k)].setText(line, juce::dontSendNotification);
+    }
+}
+
+void SimulatedControlsComponent::emitKnobAbsoluteForDevTools(const HardwareControlId id, const float normalized01)
 {
     if (appContext.controlManager == nullptr)
         return;
@@ -467,6 +604,8 @@ void SimulatedControlsComponent::timerCallback()
 
 void SimulatedControlsComponent::refreshDebugLabels()
 {
+    refreshAssignableKnobDisplaysFromPluginState();
+
     juce::String sceneLine = "Scene: -";
     juce::String chainLine = "Chain: -";
 
@@ -546,11 +685,10 @@ void SimulatedControlsComponent::refreshDebugLabels()
 
     lastEventLabel.setText(ev, juce::dontSendNotification);
 
-    juce::String knobsSummary = "K1-K4: ";
+    juce::String knobsSummary = "K1-K4 disp: ";
 
     for (int i = 0; i < 4; ++i)
-        knobsSummary += juce::String(knobs[static_cast<size_t>(i)].getValue(), 2)
-                        + (i < 3 ? " | " : "");
+        knobsSummary += knobValueLabels[static_cast<size_t>(i)].getText() + (i < 3 ? " | " : " ");
 
     knobSummaryLabel.setText(knobsSummary, juce::dontSendNotification);
 

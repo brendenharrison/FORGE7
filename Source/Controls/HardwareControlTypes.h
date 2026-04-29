@@ -38,11 +38,13 @@ enum class HardwareControlId : uint32_t
 /** Shape of the payload - interpretation of `HardwareControlEvent::value` depends on this + `id`. */
 enum class HardwareControlType : uint8_t
 {
-    /** Continuous 0...1 (knobs). `id` must be `Knob1`...`Knob4`. */
+    /** Legacy / dev: absolute 0...1 (e.g. MIDI CC as pot). Prefer `RelativeDelta` for K1-K4. */
     AbsoluteNormalized,
 
-    /** Relative movement; used with `HardwareControlId::EncoderRotate`. `value` = signed detents
-        (fractional allowed for high-res encoders). */
+    /** Relative movement.
+        - `EncoderRotate`: `value` = signed detents (fractional allowed).
+        - `Knob1`...`Knob4`: `value` = signed delta in **plugin normalized 0...1 space** per event
+          (typical fine step 0.01f). */
     RelativeDelta,
 
     /** Momentary buttons: assign, chain, encoder (when mapped as button down/up). */

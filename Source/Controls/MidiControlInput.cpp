@@ -187,10 +187,16 @@ void MidiControlInput::handleIncomingMidiMessage(juce::MidiInput* source, const 
         {
             if (cc == map.ccKnobs[static_cast<size_t>(i)])
             {
+                const float rel = relativeCcToDelta(v);
+
+                /** Mapped CC knobs: relative encoder semantics (fine step ~0.01 plugin-normalized per tick). */
+                if (rel == 0.0f)
+                    return;
+
                 HardwareControlEvent ev {};
                 ev.id = static_cast<HardwareControlId>(static_cast<int>(HardwareControlId::Knob1) + i);
-                ev.type = HardwareControlType::AbsoluteNormalized;
-                ev.value = ccValueToNormalized(v);
+                ev.type = HardwareControlType::RelativeDelta;
+                ev.value = rel > 0.0f ? 0.01f : -0.01f;
                 submit(ev);
                 return;
             }

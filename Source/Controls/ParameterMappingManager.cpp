@@ -1,6 +1,7 @@
 #include "ParameterMappingManager.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include "HardwareControlTypes.h"
@@ -162,6 +163,35 @@ void ParameterMappingManager::applyNormalizedToParameter(juce::AudioProcessorPar
     param.endChangeGesture();
 }
 
+void ParameterMappingManager::applyRelativeDeltaToParameter(juce::AudioProcessorParameter& param,
+                                                             const ParameterMappingDescriptor& row,
+                                                             const float pluginNormalizedDelta) const
+{
+    if (row.toggleMode)
+        return;
+
+    float delta = pluginNormalizedDelta;
+
+    if (row.invert)
+        delta = -delta;
+
+    const float cur = param.getValue();
+    const float next = juce::jlimit(row.minValue, row.maxValue, cur + delta);
+
+    if (std::abs(next - cur) < 1.0e-10f)
+        return;
+
+    param.beginChangeGesture();
+    param.setValueNotifyingHost(next);
+    param.endChangeGesture();
+}
+
+void ParameterMappingManager::notifyLivePluginParameterAdjustedFromHardware() const
+{
+    if (onLivePluginParameterAdjustedFromHardware != nullptr)
+        onLivePluginParameterAdjustedFromHardware();
+}
+
 void ParameterMappingManager::applyButtonToParameter(juce::AudioProcessorParameter& param,
                                                      const ParameterMappingDescriptor& row,
                                                      const bool pressed) const
@@ -219,15 +249,19 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
     const juce::String sceneId = scene->getSceneId();
     const juce::String variationId = variation->getVariationId();
 
-    /** Assign Mode (fullscreen editor): first K1-K4 movement after prepareKnobAssignment... binds hardware,
-        then subsequent moves use normal mapping - audio stays on message thread only. */
-    if (event.type == HardwareControlType::AbsoluteNormalized && isKnobId(event.id))
+    const bool knobMovementForLearn =
+        isKnobId(event.id)
+        && ((event.type == HardwareControlType::AbsoluteNormalized)
+            || (event.type == HardwareControlType::RelativeDelta && std::abs(event.value) > 1.0e-12f));
+
+    /** Fullscreen Assign Mode: next K1-K4 movement binds mapping; preserves current plugin value. */
+    if (knobMovementForLearn)
     {
+        bool consumeLearn = false;
+        int learnSlotIdx = -1;
         juce::String learnParamId;
         int learnParamIdx = -1;
-        int learnSlotIdx = -1;
         juce::String learnDisplay;
-        bool consumeLearn = false;
 
         {
             const juce::ScopedLock lock(assignmentLearnLock);
@@ -250,32 +284,6 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
                                                        learnParamId,
                                                        learnParamIdx,
                                                        learnDisplay);
-
-            ParameterMappingDescriptor fresh {};
-            bool haveFresh = false;
-
-            {
-                const juce::ScopedLock lock(mappingLock);
-
-                if (const auto* row = findActiveMapping(event, sceneId, variationId))
-                {
-                    fresh = *row;
-                    haveFresh = true;
-                }
-            }
-
-            if (haveFresh)
-            {
-                auto* ch = pluginHostManager.getPluginChain();
-
-                if (ch != nullptr)
-                    if (auto* sl = ch->getSlot(static_cast<size_t>(fresh.pluginSlotIndex)))
-                        if (auto* inst = sl->getHostedInstance())
-                            if (auto* p = resolveParameter(*inst, fresh))
-                                if (p->isAutomatable())
-                                    applyNormalizedToParameter(*p, fresh, event.value);
-            }
-
             return;
         }
     }
@@ -332,16 +340,45 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
     if (! param->isAutomatable())
         return;
 
-    if (event.type == HardwareControlType::AbsoluteNormalized)
+    const bool isAssignableKnobEvent =
+        isKnobId(event.id)
+        && ((event.type == HardwareControlType::AbsoluteNormalized)
+            || event.type == HardwareControlType::RelativeDelta);
+
+    if (suppressKnobParamWrites && isAssignableKnobEvent)
+        return;
+
+    if (event.type == HardwareControlType::AbsoluteNormalized && isKnobId(event.id))
     {
         if (event.source == HardwareControlSource::SimulatedGui && isKnobId(event.id))
         {
             static int applyEvery = 0;
             if ((++applyEvery % 12) == 0)
-                Logger::info("FORGE7 SimHW: apply knob to param display=\"" + mapping.displayName
-                             + "\" slot=" + juce::String(mapping.pluginSlotIndex) + " value=" + juce::String(event.value, 3));
+                Logger::info("FORGE7 SimHW: apply knob (absolute/dev) display=\"" + mapping.displayName
+                             + "\" slot=" + juce::String(mapping.pluginSlotIndex)
+                             + " value=" + juce::String(event.value, 3));
         }
+
         applyNormalizedToParameter(*param, mapping, event.value);
+        notifyLivePluginParameterAdjustedFromHardware();
+        return;
+    }
+
+    if (event.type == HardwareControlType::RelativeDelta && isKnobId(event.id))
+    {
+        const float previous = param->getValue();
+        const int kidx = knobIndexFromId(event.id) + 1;
+        const float deltaApplied = mapping.invert ? -event.value : event.value;
+
+        applyRelativeDeltaToParameter(*param, mapping, event.value);
+
+        const float next = param->getValue();
+
+        Logger::info("FORGE7 Assignables: K" + juce::String(kidx) + " delta=" + juce::String(deltaApplied, 4)
+                     + " current=" + juce::String(previous, 4) + " next=" + juce::String(next, 4) + " param=\""
+                     + mapping.displayName + "\"");
+
+        notifyLivePluginParameterAdjustedFromHardware();
         return;
     }
 
@@ -349,6 +386,7 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
     {
         const bool pressed = (event.type == HardwareControlType::ButtonPressed);
         applyButtonToParameter(*param, mapping, pressed);
+        notifyLivePluginParameterAdjustedFromHardware();
     }
 }
 
@@ -543,6 +581,50 @@ juce::String ParameterMappingManager::getMappedParameterValueText(const Paramete
         return {};
 
     return param->getCurrentValueAsText();
+}
+
+bool ParameterMappingManager::tryReadMappedParameterNormalized(const ParameterMappingDescriptor& row,
+                                                               float& outPlugin01) const
+{
+    auto* chain = pluginHostManager.getPluginChain();
+
+    if (chain == nullptr)
+        return false;
+
+    auto* slot = chain->getSlot(static_cast<size_t>(row.pluginSlotIndex));
+
+    if (slot == nullptr)
+        return false;
+
+    auto* instance = slot->getHostedInstance();
+
+    if (instance == nullptr)
+        return false;
+
+    auto* param = resolveParameter(*instance, row);
+
+    if (param == nullptr)
+        return false;
+
+    outPlugin01 = param->getValue();
+    return true;
+}
+
+float ParameterMappingManager::hardwareArc01ForHud(const ParameterMappingDescriptor& row,
+                                                    const float pluginNormalized01) noexcept
+{
+    const float span = row.maxValue - row.minValue;
+
+    if (span <= 1.0e-8f)
+        return 0.5f;
+
+    float t = (pluginNormalized01 - row.minValue) / span;
+    t = juce::jlimit(0.0f, 1.0f, t);
+
+    if (row.invert)
+        t = 1.0f - t;
+
+    return t;
 }
 
 juce::var ParameterMappingManager::exportMappingsToVar() const

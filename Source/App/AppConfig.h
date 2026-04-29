@@ -28,6 +28,9 @@ public:
     /** Dev-only floating simulated hardware panel (default true for desktop iteration). */
     bool getShowSimulatedControls() const noexcept;
 
+    /** When true, Sim HW exposes absolute 0...1 sliders for K1-K4 (otherwise relative +/- only). */
+    bool getSimDevAbsoluteKnobTest() const noexcept;
+
     /** Audio device persistence (JUCE AudioDeviceManager state XML serialized to string). */
     juce::String getAudioDeviceStateXml() const;
     void setAudioDeviceStateXml(const juce::String& xml);

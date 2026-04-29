@@ -60,6 +60,16 @@ public:
     /** Live value string from the hosted plugin for Performance HUD (message thread only). */
     juce::String getMappedParameterValueText(const ParameterMappingDescriptor& row) const;
 
+    /** Current plugin parameter value 0...1, or false if unresolvable. Message thread only. */
+    bool tryReadMappedParameterNormalized(const ParameterMappingDescriptor& row, float& outPlugin01) const;
+
+    /** Maps plugin normalized value to 0...1 arc for HUD ring (applies min/max span + invert). */
+    static float hardwareArc01ForHud(const ParameterMappingDescriptor& row, float pluginNormalized01) noexcept;
+
+    /** When true, K1-K4 hardware events do not write to plugin parameters (hydration safety). */
+    void setSuppressAssignableKnobParameterWrites(bool shouldSuppress) noexcept { suppressKnobParamWrites = shouldSuppress; }
+    bool isSuppressAssignableKnobParameterWrites() const noexcept { return suppressKnobParamWrites; }
+
     /** Fullscreen Assign Mode: next K1-K4 hardware move assigns that knob to this parameter (scene/variation scoped). */
     void prepareKnobAssignmentToNextHardwareMove(int pluginSlotIndex,
                                                  const juce::String& pluginParameterId,
@@ -78,6 +88,12 @@ public:
     /** Optional: conservative dirty signal when mappings change from UI/learn (not used during project import). */
     void setOnMappingsDirty(std::function<void()> f) { onMappingsDirty = std::move(f); }
 
+    /** When K1-K4 (or assign buttons) change live plugin values from hardware. */
+    void setOnLivePluginParameterAdjustedFromHardware(std::function<void()> f)
+    {
+        onLivePluginParameterAdjustedFromHardware = std::move(f);
+    }
+
     // --- Future GUI learn (placeholders) ---------------------------------------------
 
     /** Future: arm learn mode so the next touched plugin UI control binds to `hardwareId`. */
@@ -94,12 +110,17 @@ private:
     PluginHostManager& pluginHostManager;
 
     std::function<void()> onMappingsDirty;
+    std::function<void()> onLivePluginParameterAdjustedFromHardware;
+
+    void notifyLivePluginParameterAdjustedFromHardware() const;
 
     mutable juce::CriticalSection mappingLock;
     std::vector<ParameterMappingDescriptor> mappings;
 
     bool learnArmed { false };
     HardwareControlId learnHardwareTarget { HardwareControlId::Knob1 };
+
+    bool suppressKnobParamWrites { false };
 
     static void clampDescriptor(ParameterMappingDescriptor& d);
 
@@ -116,6 +137,10 @@ private:
     void applyNormalizedToParameter(juce::AudioProcessorParameter& param,
                                     const ParameterMappingDescriptor& row,
                                     float hardwareNormalized01) const;
+
+    void applyRelativeDeltaToParameter(juce::AudioProcessorParameter& param,
+                                       const ParameterMappingDescriptor& row,
+                                       float pluginNormalizedDelta) const;
 
     void applyButtonToParameter(juce::AudioProcessorParameter& param,
                                 const ParameterMappingDescriptor& row,

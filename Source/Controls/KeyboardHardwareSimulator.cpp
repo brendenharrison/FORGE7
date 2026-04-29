@@ -36,13 +36,11 @@ void KeyboardHardwareSimulator::detach()
 
 void KeyboardHardwareSimulator::bumpKnob(const int knobIndex01, const float delta) const
 {
-    const float cur = controlManager.getHardwareState().getKnobNormalized(knobIndex01);
-
     HardwareControlEvent e {};
     e.id = static_cast<HardwareControlId>(static_cast<int>(HardwareControlId::Knob1) + knobIndex01);
-    e.type = HardwareControlType::AbsoluteNormalized;
+    e.type = HardwareControlType::RelativeDelta;
     e.source = HardwareControlSource::SimulatedKeyboard;
-    e.value = juce::jlimit(0.0f, 1.0f, cur + delta);
+    e.value = juce::jlimit(-0.25f, 0.25f, delta);
     controlManager.submitHardwareEvent(e);
 }
 
