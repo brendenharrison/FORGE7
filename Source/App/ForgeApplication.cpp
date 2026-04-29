@@ -5,6 +5,8 @@
 #include "DevToolsWindow.h"
 #include "MainComponent.h"
 
+#include "../GUI/RackViewComponent.h"
+
 #include "../Audio/AudioEngine.h"
 #include "../Controls/ControlManager.h"
 #include "../Controls/ParameterMappingManager.h"
@@ -238,6 +240,42 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
                                            if (auto* c = mainWin->getContentComponent())
                                                c->grabKeyboardFocus();
                                    });
+
+    juce::MessageManager::callAsync([proj = projectSerializer.get(),
+                                     host = pluginHostManager.get(),
+                                     cfg = appConfig.get(),
+                                     win = mainWindow.get(),
+                                     audio = audioEngine.get()]()
+                                    {
+                                        if (proj == nullptr || host == nullptr || cfg == nullptr || win == nullptr)
+                                            return;
+
+                                        const juce::String path = cfg->getLastLoadedProjectPath();
+
+                                        if (path.isEmpty())
+                                            return;
+
+                                        const juce::File file(path);
+
+                                        if (! file.existsAsFile())
+                                            return;
+
+                                        const auto r = proj->loadProjectFromFile(file, host, audio);
+
+                                        if (r.failed())
+                                        {
+                                            Logger::warn("FORGE7: startup restore last project failed - "
+                                                         + r.getErrorMessage());
+                                            return;
+                                        }
+
+                                        if (auto* mc = dynamic_cast<MainComponent*>(win->getContentComponent()))
+                                            if (auto* rv = mc->getRackView())
+                                                rv->refreshAfterProjectHydration();
+
+                                        Logger::info("FORGE7: restored last project at startup - "
+                                                     + file.getFullPathName());
+                                    });
 }
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW

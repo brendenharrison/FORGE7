@@ -402,8 +402,18 @@ void PerformanceViewComponent::refreshHud()
 
             knobCards[static_cast<size_t>(k)]->setParameterTitle(title);
 
-            const int pct = juce::roundToInt(norm * 100.0f);
-            knobCards[static_cast<size_t>(k)]->setValueText(juce::String(pct) + "%");
+            juce::String valueLine = juce::String(juce::roundToInt(norm * 100.0f)) + "%";
+
+            if (mapKnob[k] != nullptr && appContext.parameterMappingManager != nullptr)
+            {
+                const juce::String hostText =
+                    appContext.parameterMappingManager->getMappedParameterValueText(*mapKnob[k]);
+
+                if (hostText.isNotEmpty())
+                    valueLine = hostText;
+            }
+
+            knobCards[static_cast<size_t>(k)]->setValueText(valueLine);
         }
     }
 

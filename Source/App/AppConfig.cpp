@@ -126,4 +126,18 @@ void AppConfig::setAudioDeviceStateXml(const juce::String& xml)
         o->setProperty("audioDeviceStateXml", xml);
 }
 
+juce::String AppConfig::getLastLoadedProjectPath() const
+{
+    if (auto* o = settings.getDynamicObject())
+        return o->getProperty("lastLoadedProjectPath").toString();
+
+    return {};
+}
+
+void AppConfig::setLastLoadedProjectPath(const juce::String& absolutePath)
+{
+    if (auto* o = settings.getDynamicObject())
+        o->setProperty("lastLoadedProjectPath", absolutePath);
+}
+
 } // namespace forge7

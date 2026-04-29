@@ -8,6 +8,7 @@ namespace forge7
 class SceneManager;
 class ParameterMappingManager;
 class PluginHostManager;
+class AudioEngine;
 
 /** Persists FORGE 7 projects as UTF-8 JSON (`juce::JSON`, `juce::var`, `juce::DynamicObject`).
 
@@ -36,11 +37,17 @@ public:
 
     ~ProjectSerializer();
 
-    /** When `captureLiveFromHost` is set, snapshots the live rack for the active variation first. */
-    juce::Result saveProjectToFile(const juce::File& file, PluginHostManager* captureLiveFromHost = nullptr);
+    /** When `captureLiveFromHost` is set, snapshots the live rack for the active variation first.
+        Optional `audioEngine` persists global FX bypass with the project. */
+    juce::Result saveProjectToFile(const juce::File& file,
+                                   PluginHostManager* captureLiveFromHost = nullptr,
+                                   AudioEngine* audioEngine = nullptr);
 
-    /** When `hydrateIntoHost` is set, loads plugins for the active variation (best-effort). */
-    juce::Result loadProjectFromFile(const juce::File& file, PluginHostManager* hydrateIntoHost = nullptr);
+    /** When `hydrateIntoHost` is set, loads plugins for the active variation (best-effort).
+        Optional `audioEngine` restores global FX bypass from file when present. */
+    juce::Result loadProjectFromFile(const juce::File& file,
+                                     PluginHostManager* hydrateIntoHost = nullptr,
+                                     AudioEngine* audioEngine = nullptr);
 
 private:
     SceneManager& sceneManager;

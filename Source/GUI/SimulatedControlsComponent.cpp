@@ -1,5 +1,6 @@
 #include "SimulatedControlsComponent.h"
 
+#include "../App/AppConfig.h"
 #include "../App/AppContext.h"
 #include "../App/MainComponent.h"
 #include "../Controls/ControlManager.h"
@@ -375,7 +376,22 @@ void SimulatedControlsComponent::wireButtons()
                                  if (f == juce::File {})
                                      return;
 
-                                 appContext.projectSerializer->saveProjectToFile(f, appContext.pluginHostManager);
+                                 const auto r = appContext.projectSerializer->saveProjectToFile(
+                                     f,
+                                     appContext.pluginHostManager,
+                                     appContext.audioEngine);
+
+                                 if (r.failed())
+                                 {
+                                     Logger::warn("FORGE7: save project failed - " + r.getErrorMessage());
+                                     return;
+                                 }
+
+                                 if (appContext.appConfig != nullptr)
+                                 {
+                                     appContext.appConfig->setLastLoadedProjectPath(f.getFullPathName());
+                                     appContext.appConfig->saveToFile();
+                                 }
                              });
     };
 
@@ -396,7 +412,22 @@ void SimulatedControlsComponent::wireButtons()
                                  if (f == juce::File {})
                                      return;
 
-                                 appContext.projectSerializer->loadProjectFromFile(f, appContext.pluginHostManager);
+                                 const auto r = appContext.projectSerializer->loadProjectFromFile(
+                                     f,
+                                     appContext.pluginHostManager,
+                                     appContext.audioEngine);
+
+                                 if (r.failed())
+                                 {
+                                     Logger::warn("FORGE7: load project failed - " + r.getErrorMessage());
+                                     return;
+                                 }
+
+                                 if (appContext.appConfig != nullptr)
+                                 {
+                                     appContext.appConfig->setLastLoadedProjectPath(f.getFullPathName());
+                                     appContext.appConfig->saveToFile();
+                                 }
 
                                  if (appContext.mainComponent != nullptr && appContext.mainComponent->getRackView() != nullptr)
                                      appContext.mainComponent->getRackView()->refreshAfterProjectHydration();

@@ -623,7 +623,10 @@ void PluginHostManager::hydratePluginChainFromChainVariation(PluginChain& chain,
         const ChainSlotSnapshot& snap = variation.getChainSnapshot().slots[static_cast<size_t>(i)];
 
         if (snap.isEmpty || snap.fileOrIdentifier.isEmpty())
+        {
+            slot->setBypass(false);
             continue;
+        }
 
         juce::PluginDescription pd = pluginDescriptionFromSnapshot(snap);
 
@@ -656,6 +659,8 @@ void PluginHostManager::hydratePluginChainFromChainVariation(PluginChain& chain,
             if (! preset.isEmpty())
                 slot->getPluginStatePlaceholder() = preset;
         }
+
+        slot->setBypass(snap.bypass);
     }
 }
 

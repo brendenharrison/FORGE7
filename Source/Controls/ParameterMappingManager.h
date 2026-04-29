@@ -56,6 +56,9 @@ public:
     /** Enumerate automatable parameters for the audible chain's slot - message thread only. */
     juce::Array<AutomatableParameterSummary> getAutomatableParametersForSlot(int pluginSlotIndex) const;
 
+    /** Live value string from the hosted plugin for Performance HUD (message thread only). */
+    juce::String getMappedParameterValueText(const ParameterMappingDescriptor& row) const;
+
     /** Fullscreen Assign Mode: next K1-K4 hardware move assigns that knob to this parameter (scene/variation scoped). */
     void prepareKnobAssignmentToNextHardwareMove(int pluginSlotIndex,
                                                  const juce::String& pluginParameterId,

@@ -244,6 +244,32 @@ void ParameterMappingManager::processHardwareEvent(const HardwareControlEvent& e
                                                        learnParamId,
                                                        learnParamIdx,
                                                        learnDisplay);
+
+            ParameterMappingDescriptor fresh {};
+            bool haveFresh = false;
+
+            {
+                const juce::ScopedLock lock(mappingLock);
+
+                if (const auto* row = findActiveMapping(event, sceneId, variationId))
+                {
+                    fresh = *row;
+                    haveFresh = true;
+                }
+            }
+
+            if (haveFresh)
+            {
+                auto* ch = pluginHostManager.getPluginChain();
+
+                if (ch != nullptr)
+                    if (auto* sl = ch->getSlot(static_cast<size_t>(fresh.pluginSlotIndex)))
+                        if (auto* inst = sl->getHostedInstance())
+                            if (auto* p = resolveParameter(*inst, fresh))
+                                if (p->isAutomatable())
+                                    applyNormalizedToParameter(*p, fresh, event.value);
+            }
+
             return;
         }
     }
@@ -479,6 +505,31 @@ juce::Array<AutomatableParameterSummary> ParameterMappingManager::getAutomatable
     }
 
     return result;
+}
+
+juce::String ParameterMappingManager::getMappedParameterValueText(const ParameterMappingDescriptor& row) const
+{
+    auto* chain = pluginHostManager.getPluginChain();
+
+    if (chain == nullptr)
+        return {};
+
+    auto* slot = chain->getSlot(static_cast<size_t>(row.pluginSlotIndex));
+
+    if (slot == nullptr)
+        return {};
+
+    auto* instance = slot->getHostedInstance();
+
+    if (instance == nullptr)
+        return {};
+
+    auto* param = resolveParameter(*instance, row);
+
+    if (param == nullptr)
+        return {};
+
+    return param->getCurrentValueAsText();
 }
 
 juce::var ParameterMappingManager::exportMappingsToVar() const

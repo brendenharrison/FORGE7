@@ -32,6 +32,9 @@ public:
     juce::String getAudioDeviceStateXml() const;
     void setAudioDeviceStateXml(const juce::String& xml);
 
+    juce::String getLastLoadedProjectPath() const;
+    void setLastLoadedProjectPath(const juce::String& absolutePath);
+
 private:
     juce::var settings;
 

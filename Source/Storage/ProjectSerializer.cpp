@@ -20,6 +20,7 @@
 #include "../Scene/ChainVariation.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
+#include "../Audio/AudioEngine.h"
 #include "../Utilities/Logger.h"
 
 namespace forge7
@@ -297,7 +298,9 @@ void ProjectSerializer::hydrateActiveVariationIntoHost(PluginHostManager& host)
     host.hydratePluginChainFromChainVariation(*chain, *variation);
 }
 
-juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file, PluginHostManager* captureLiveFromHost)
+juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file,
+                                                  PluginHostManager* captureLiveFromHost,
+                                                  AudioEngine* audioEngine)
 {
     if (captureLiveFromHost != nullptr)
         syncActiveVariationFromLiveHost(*captureLiveFromHost);
@@ -310,6 +313,9 @@ juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file, Plugin
     const int activeSceneIndex = sceneManager.getActiveSceneIndex();
 
     root->setProperty("activeSceneIndex", activeSceneIndex);
+
+    if (audioEngine != nullptr)
+        root->setProperty("globalBypassEffects", audioEngine->isGlobalBypass());
 
     root->setProperty("globalParameterMappings", parameterMappingManager.exportMappingsToVar());
 
@@ -334,7 +340,9 @@ juce::Result ProjectSerializer::saveProjectToFile(const juce::File& file, Plugin
     return juce::Result::ok();
 }
 
-juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file, PluginHostManager* hydrateIntoHost)
+juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file,
+                                                    PluginHostManager* hydrateIntoHost,
+                                                    AudioEngine* audioEngine)
 {
     if (! file.existsAsFile())
         return juce::Result::fail("FORGE7: project file does not exist");
@@ -405,6 +413,9 @@ juce::Result ProjectSerializer::loadProjectFromFile(const juce::File& file, Plug
         hydrateIntoHost->resetVariationRoutingAfterProjectLoad();
         hydrateActiveVariationIntoHost(*hydrateIntoHost);
     }
+
+    if (audioEngine != nullptr && root->hasProperty("globalBypassEffects"))
+        audioEngine->setGlobalBypass(static_cast<bool>(root->getProperty("globalBypassEffects")));
 
     Logger::info("FORGE7: loaded project - " + file.getFullPathName());
 
