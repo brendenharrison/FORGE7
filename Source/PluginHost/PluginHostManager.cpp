@@ -130,6 +130,12 @@ PluginHostManager::PluginHostManager()
 
     chains[0] = std::make_unique<PluginChain>();
     chains[1] = std::make_unique<PluginChain>();
+
+    if (chains[0] != nullptr)
+        chains[0]->setMeterTaps(&chainMeterTaps);
+
+    if (chains[1] != nullptr)
+        chains[1]->setMeterTaps(&chainMeterTaps);
 }
 
 PluginHostManager::~PluginHostManager()
@@ -756,10 +762,10 @@ void PluginHostManager::processMonoBlock(float* monoInOut, int numSamples)
         juce::FloatVectorOperations::copy(bufB, monoInOut, numSamples);
 
         if (chains[static_cast<size_t>(outIdx)] != nullptr)
-            chains[static_cast<size_t>(outIdx)]->processMonoBlock(bufA, numSamples);
+            chains[static_cast<size_t>(outIdx)]->processMonoBlock(bufA, numSamples, false);
 
         if (chains[static_cast<size_t>(inIdx)] != nullptr)
-            chains[static_cast<size_t>(inIdx)]->processMonoBlock(bufB, numSamples);
+            chains[static_cast<size_t>(inIdx)]->processMonoBlock(bufB, numSamples, true);
 
         const bool completed = variationCrossfade.processCrossfadeBlock(bufA, bufB, monoInOut, numSamples);
 

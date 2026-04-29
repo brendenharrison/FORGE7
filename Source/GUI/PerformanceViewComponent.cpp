@@ -358,6 +358,27 @@ PerformanceViewComponent::PerformanceViewComponent(AppContext& context)
 
     addAndMakeVisible(audioHealthMonitor);
 
+    if (appContext.pluginHostManager != nullptr)
+    {
+        auto& phm = *appContext.pluginHostManager;
+
+        perfInputVuMeter = std::make_unique<VuMeterComponent>(
+            [&phm]()
+            { return phm.getChainMeterTaps().preChainPeak.load(std::memory_order_relaxed); },
+            nullptr,
+            true);
+        perfInputVuMeter->setCaption("IN");
+        addAndMakeVisible(*perfInputVuMeter);
+
+        perfOutputVuMeter = std::make_unique<VuMeterComponent>(
+            [&phm]()
+            { return phm.getChainMeterTaps().postOutputGainPeak.load(std::memory_order_relaxed); },
+            nullptr,
+            true);
+        perfOutputVuMeter->setCaption("OUT");
+        addAndMakeVisible(*perfOutputVuMeter);
+    }
+
     refreshHud();
     startTimerHz(12);
 }
@@ -590,6 +611,7 @@ void PerformanceViewComponent::resized()
 
     const int topBarH = 48;
     const int bottomHud = 26;
+    const int sideMeterW = 18;
 
     auto top = r.removeFromTop(topBarH).reduced(8, 6);
 
@@ -616,6 +638,17 @@ void PerformanceViewComponent::resized()
 
     auto bottomArea = r.removeFromBottom(bottomHud);
     audioHealthMonitor.setBounds(bottomArea.reduced(12, 4));
+
+    if (perfInputVuMeter != nullptr)
+        perfInputVuMeter->setBounds(0, topBarH, sideMeterW, juce::jmax(0, getHeight() - topBarH - bottomHud));
+    if (perfOutputVuMeter != nullptr)
+        perfOutputVuMeter->setBounds(juce::jmax(0, getWidth() - sideMeterW),
+                                       topBarH,
+                                       sideMeterW,
+                                       juce::jmax(0, getHeight() - topBarH - bottomHud));
+
+    r.removeFromLeft(sideMeterW);
+    r.removeFromRight(sideMeterW);
 
     r.reduce(14, 10);
 

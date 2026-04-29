@@ -52,11 +52,13 @@ Note: older internal code may still use **ChainVariation** in places. User-facin
 **Performance Mode**
 - Primary live view.
 - Shows project, scene, active chain, K1-K4 assignments/value text, BPM/CPU/status.
+- Main input and output peak meters only (no per-slot meters); clip warnings match Rack metering.
 - Designed for live use and fast chain/scene switching.
 
 **Rack/Edit Mode**
 - Build/edit the active Chain.
 - Shows signal flow and plugin cards.
+- Peak **VU-style meters** at chain input, after each plugin slot (post-slot), and at output for gain staging. Clip warnings are brief red indicators near ~0.98 FS.
 - Plugin browser opens in-app.
 - Supports plugin editor access, bypass, replace, remove, and rack navigation.
 

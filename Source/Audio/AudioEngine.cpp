@@ -6,6 +6,7 @@
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
+#include "ChainMeterTaps.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../Utilities/Logger.h"
 
@@ -49,6 +50,27 @@ float maxStoredInputPeaks(const std::array<std::atomic<float>, static_cast<size_
     for (const auto& p : peaks)
         m = juce::jmax(m, p.load(std::memory_order_relaxed));
     return m;
+}
+
+float peakAbsBlock(const float* x, int numSamples) noexcept
+{
+    if (x == nullptr || numSamples <= 0)
+        return 0.0f;
+
+    float p = 0.0f;
+
+    for (int i = 0; i < numSamples; ++i)
+        p = juce::jmax(p, std::abs(x[i]));
+
+    return juce::jlimit(0.0f, 1.0f, p);
+}
+
+void storeBypassPassthroughSlotPeaks(ChainMeterTaps& taps, const float* mono, int numSamples) noexcept
+{
+    const float pk = peakAbsBlock(mono, numSamples);
+
+    for (auto& slotPeak : taps.postSlotPeak)
+        slotPeak.store(pk, std::memory_order_relaxed);
 }
 
 /** Returns number of channels mixed into mono; `outSelectedCh` is first contributing channel index or -1. */
@@ -464,6 +486,13 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
             juce::FloatVectorOperations::copy(outSecondary, mono, numSamples);
 
         meterOutputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+
+        {
+            auto& taps = pluginHostManager.getChainMeterTaps();
+            taps.preChainPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+            storeBypassPassthroughSlotPeaks(taps, mono, numSamples);
+            taps.postOutputGainPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+        }
         return;
     }
 
@@ -488,8 +517,13 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     for (int i = 0; i < numSamples; ++i)
         inPeak = juce::jmax(inPeak, std::abs(mono[i]));
 
+    auto& meterTaps = pluginHostManager.getChainMeterTaps();
+    meterTaps.preChainPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
+
     if (! bypassChain)
         pluginHostManager.processMonoBlock(mono, numSamples);
+    else
+        storeBypassPassthroughSlotPeaks(meterTaps, mono, numSamples);
 
     float outPeak = 0.0f;
     if (outGain != 1.0f)
@@ -506,6 +540,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         for (int i = 0; i < numSamples; ++i)
             outPeak = juce::jmax(outPeak, std::abs(mono[i]));
     }
+
+    meterTaps.postOutputGainPeak.store(juce::jlimit(0.0f, 1.0f, outPeak), std::memory_order_relaxed);
 
     meterInputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
     meterOutputPeak.store(monitorOn ? juce::jlimit(0.0f, 1.0f, outPeak) : 0.0f, std::memory_order_relaxed);
@@ -610,6 +646,7 @@ void AudioEngine::audioDeviceStopped()
     lastNumOutputChannels.store(0, std::memory_order_relaxed);
     inputPresentFlag.store(0u, std::memory_order_relaxed);
     clearInputChannelPeaks(inputChannelRawPeaks);
+    pluginHostManager.getChainMeterTaps().resetPeaksToZero();
 }
 
 } // namespace forge7

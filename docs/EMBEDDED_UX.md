@@ -26,6 +26,7 @@ Performance mode:
 
 Rack/Edit mode:
 - editing surface for the active chain
+- input / post-slot / output peak meters for gain staging (Performance mode shows input/output only)
 - still usable on touchscreen (large cards, clear actions)
 
 Fullscreen plugin editor:

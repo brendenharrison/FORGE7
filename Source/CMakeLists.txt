@@ -52,6 +52,7 @@ set(FORGE7_SOURCES
     GUI/AudioHealthMonitor.cpp
     GUI/CpuMeter.cpp
     GUI/LevelMeter.cpp
+    GUI/VuMeterComponent.cpp
 
     Utilities/Logger.cpp
 )

@@ -288,6 +288,38 @@ RackViewComponent::RackViewComponent(AppContext& context)
     if (addPluginCard != nullptr)
         chainContent->addAndMakeVisible(*addPluginCard);
 
+    if (appContext.pluginHostManager != nullptr)
+    {
+        auto& phm = *appContext.pluginHostManager;
+
+        rackInputVuMeter = std::make_unique<VuMeterComponent>(
+            [&phm]()
+            { return phm.getChainMeterTaps().preChainPeak.load(std::memory_order_relaxed); },
+            nullptr,
+            true);
+        rackInputVuMeter->setCaption("IN");
+        addAndMakeVisible(*rackInputVuMeter);
+
+        rackOutputVuMeter = std::make_unique<VuMeterComponent>(
+            [&phm]()
+            { return phm.getChainMeterTaps().postOutputGainPeak.load(std::memory_order_relaxed); },
+            nullptr,
+            true);
+        rackOutputVuMeter->setCaption("OUT");
+        addAndMakeVisible(*rackOutputVuMeter);
+
+        for (int i = 0; i < kPluginChainMaxSlots; ++i)
+        {
+            const int slot = i;
+            rackPostSlotVuMeters[static_cast<size_t>(i)] = std::make_unique<VuMeterComponent>(
+                [&phm, slot]()
+                { return phm.getChainMeterTaps().postSlotPeak[static_cast<size_t>(slot)].load(std::memory_order_relaxed); },
+                nullptr,
+                true);
+            chainContent->addAndMakeVisible(*rackPostSlotVuMeters[static_cast<size_t>(i)]);
+        }
+    }
+
     chainViewport.setViewedComponent(chainContent.get(), false);
     chainViewport.setScrollBarsShown(false, true); // no vertical scroll; center lane may scroll horizontally later
     chainViewport.getHorizontalScrollBar().setColour(juce::ScrollBar::thumbColourId, rackAccent().withAlpha(0.55f));
@@ -590,10 +622,23 @@ void RackViewComponent::resized()
     auto rightIo = chainArea.removeFromRight(ioW);
     chainArea.removeFromRight(10);
 
-    if (inputBlock != nullptr)
-        inputBlock->setBounds(leftIo.reduced(0, 8));
-    if (outputBlock != nullptr)
-        outputBlock->setBounds(rightIo.reduced(0, 8));
+    constexpr int ioMeterStripW = 14;
+
+    {
+        auto leftInner = leftIo.reduced(0, 8);
+        if (rackInputVuMeter != nullptr)
+            rackInputVuMeter->setBounds(leftInner.removeFromRight(ioMeterStripW));
+        if (inputBlock != nullptr)
+            inputBlock->setBounds(leftInner);
+    }
+
+    {
+        auto rightInner = rightIo.reduced(0, 8);
+        if (rackOutputVuMeter != nullptr)
+            rackOutputVuMeter->setBounds(rightInner.removeFromLeft(ioMeterStripW));
+        if (outputBlock != nullptr)
+            outputBlock->setBounds(rightInner);
+    }
 
     chainViewport.setBounds(chainArea);
 
@@ -607,7 +652,9 @@ void RackViewComponent::layoutRackChain()
     if (chainContent == nullptr)
         return;
 
-    const int arrowW = 30;
+    // Post-slot meters sit in the signal lane after each visible plugin card (gain staging: level after slot N).
+    constexpr int meterW = 14;
+    const int arrowW = 26;
     const int gap = 10;
     const int pad = 8;
     const int stripH = juce::jmax(150, chainViewport.getHeight() > 0 ? chainViewport.getHeight() - 8 : 150);
@@ -649,6 +696,10 @@ void RackViewComponent::layoutRackChain()
         if (a != nullptr)
             a->setVisible(false);
 
+    for (auto& m : rackPostSlotVuMeters)
+        if (m != nullptr)
+            m->setVisible(false);
+
     int x = pad;
     const int y = pad;
 
@@ -679,6 +730,13 @@ void RackViewComponent::layoutRackChain()
         c->setBounds(x, y, pluginW, stripH);
         x += pluginW + gap;
 
+        if (rackPostSlotVuMeters[(size_t)i] != nullptr)
+        {
+            rackPostSlotVuMeters[(size_t)i]->setVisible(true);
+            rackPostSlotVuMeters[(size_t)i]->setBounds(x, y, meterW, stripH);
+        }
+        x += meterW + gap;
+
         placeArrow(x);
         x += arrowW + gap;
     }
@@ -691,6 +749,14 @@ void RackViewComponent::layoutRackChain()
         {
             c->setBounds(x, y, pluginW, stripH);
             x += pluginW + gap;
+
+            const int ps = pendingAddSlotIndex;
+            if (rackPostSlotVuMeters[(size_t)ps] != nullptr)
+            {
+                rackPostSlotVuMeters[(size_t)ps]->setVisible(true);
+                rackPostSlotVuMeters[(size_t)ps]->setBounds(x, y, meterW, stripH);
+            }
+            x += meterW + gap;
 
             placeArrow(x);
             x += arrowW + gap;
@@ -723,6 +789,10 @@ void RackViewComponent::layoutRackChain()
         for (int i = 0; i < kPluginChainMaxSlots; ++i)
             if (slotCards[(size_t)i] != nullptr && slotCards[(size_t)i]->isVisible())
                 slotCards[(size_t)i]->setTopLeftPosition(slotCards[(size_t)i]->getX() + dx, slotCards[(size_t)i]->getY());
+
+        for (auto& m : rackPostSlotVuMeters)
+            if (m != nullptr && m->isVisible())
+                m->setTopLeftPosition(m->getX() + dx, m->getY());
 
         if (addPluginCard != nullptr && addPluginCard->isVisible())
             addPluginCard->setTopLeftPosition(addPluginCard->getX() + dx, addPluginCard->getY());

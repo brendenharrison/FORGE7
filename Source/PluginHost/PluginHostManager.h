@@ -8,6 +8,7 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include "../Audio/ChainMeterTaps.h"
 #include "../Audio/CrossfadeMixer.h"
 
 #include "PluginScanSkipStore.h"
@@ -98,6 +99,9 @@ public:
     /** Real-time mono path - allocation-free when not crossfading; uses pre-sized scratch when crossfading. */
     void processMonoBlock(float* monoInOut, int numSamples);
 
+    /** Lock-free peak taps for rack gain-staging meters (audio writes, GUI reads). */
+    ChainMeterTaps& getChainMeterTaps() noexcept { return chainMeterTaps; }
+
     void prepareToPlay(double sampleRate, int blockSize);
     void releaseResources();
 
@@ -167,6 +171,8 @@ private:
     std::atomic<bool> shutdownFlag { false };
 
     PluginScanSkipStore pluginScanSkips;
+
+    ChainMeterTaps chainMeterTaps;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginHostManager)
 };

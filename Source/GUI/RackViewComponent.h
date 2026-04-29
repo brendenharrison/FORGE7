@@ -8,6 +8,7 @@
 
 #include "../PluginHost/PluginChain.h"
 #include "CpuMeter.h"
+#include "VuMeterComponent.h"
 #include "RackSlotCard.h"
 #include "UiTextAsciiPolicy.h"
 
@@ -131,6 +132,11 @@ private:
 
     std::unique_ptr<IoBlock> inputBlock;
     std::unique_ptr<IoBlock> outputBlock;
+
+    /** Peak meters: chain input (pre-plugin), post-slot (after each slot in chain lane), final output. */
+    std::unique_ptr<VuMeterComponent> rackInputVuMeter;
+    std::unique_ptr<VuMeterComponent> rackOutputVuMeter;
+    std::array<std::unique_ptr<VuMeterComponent>, kPluginChainMaxSlots> rackPostSlotVuMeters {};
     std::array<std::unique_ptr<juce::Label>, 9> arrowLabels {};
     std::array<std::unique_ptr<RackSlotCard>, kPluginChainMaxSlots> slotCards {};
 

@@ -7,6 +7,7 @@
 
 #include "AudioHealthMonitor.h"
 #include "CpuMeter.h"
+#include "VuMeterComponent.h"
 
 namespace forge7
 {
@@ -71,6 +72,10 @@ private:
     juce::Label assign2FunctionLabel;
 
     AudioHealthMonitor audioHealthMonitor;
+
+    /** Main input / output peaks only (no per-plugin meters in Performance mode). */
+    std::unique_ptr<VuMeterComponent> perfInputVuMeter;
+    std::unique_ptr<VuMeterComponent> perfOutputVuMeter;
 
     /** When scene|chain navigation changes, knob mapping debug logs once (not timer-spammed). */
     juce::String lastAssignablesHudLogKey;

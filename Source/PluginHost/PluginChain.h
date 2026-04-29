@@ -10,6 +10,7 @@ namespace forge7
 {
 
 class PluginSlot;
+struct ChainMeterTaps;
 
 constexpr int kPluginChainMaxSlots = 8;
 
@@ -55,11 +56,15 @@ public:
     /** Release hosted processors - not from inside `processMonoBlock`. */
     void releaseResources();
 
-    /** Serial mono RT processing in fixed slot order - allocation-free hot path. */
-    void processMonoBlock(float* monoInOut, int numSamples);
+    /** Serial mono RT processing in fixed slot order - allocation-free hot path.
+        When `publishMeters` is false, post-slot peak taps are not written (crossfade path). */
+    void processMonoBlock(float* monoInOut, int numSamples, bool publishMeters = true);
 
     /** Alias requested for symmetry with future stereo `AudioBuffer` overloads - same mono path as `processMonoBlock`. */
     void processBlock(float* monoInOut, int numSamples);
+
+    /** Message thread: connects RT peak taps for rack metering (optional). */
+    void setMeterTaps(ChainMeterTaps* taps) noexcept { meterTaps = taps; }
 
     /** Register placeholder metadata (pass-through audio until real instance is wired). Message thread only. */
     bool addPluginToSlot(int slotIndex,
@@ -99,6 +104,8 @@ private:
     juce::MidiBuffer midiScratch;
 
     mutable std::shared_mutex chainMutex;
+
+    ChainMeterTaps* meterTaps { nullptr };
 
     bool isValidSlotIndex(int slotIndex) const noexcept;
 

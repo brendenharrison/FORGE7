@@ -1,10 +1,26 @@
 #include "PluginChain.h"
 
+#include "../Audio/ChainMeterTaps.h"
 #include "PluginSlot.h"
 #include "../Utilities/Logger.h"
 
 namespace forge7
 {
+namespace
+{
+float peakAbsBlock(const float* x, int numSamples) noexcept
+{
+    if (x == nullptr || numSamples <= 0)
+        return 0.0f;
+
+    float p = 0.0f;
+
+    for (int i = 0; i < numSamples; ++i)
+        p = juce::jmax(p, std::abs(x[i]));
+
+    return juce::jlimit(0.0f, 1.0f, p);
+}
+} // namespace
 
 PluginChain::PluginChain()
 {
@@ -51,7 +67,7 @@ void PluginChain::releaseResources()
             slot->releaseResources();
 }
 
-void PluginChain::processMonoBlock(float* monoInOut, int numSamples)
+void PluginChain::processMonoBlock(float* monoInOut, int numSamples, bool publishMeters)
 {
     // RT: non-blocking shared lock - if exclusive editing holds the mutex, skip FX this block (dry pass-through).
     std::shared_lock<std::shared_mutex> sharedLock(chainMutex, std::try_to_lock);
@@ -63,20 +79,21 @@ void PluginChain::processMonoBlock(float* monoInOut, int numSamples)
 
     midiScratch.clear();
 
-    for (auto& slot : slots)
+    for (size_t i = 0; i < slots.size(); ++i)
     {
-        if (slot == nullptr)
-            continue;
+        auto& slot = slots[i];
 
-        slot->processMonoBlock(monoInOut, numSamples, midiScratch);
+        if (slot != nullptr)
+            slot->processMonoBlock(monoInOut, numSamples, midiScratch);
 
-        // Future VST3: latency reporting / PDC compensation between slots.
+        if (publishMeters && meterTaps != nullptr && i < meterTaps->postSlotPeak.size())
+            meterTaps->postSlotPeak[i].store(peakAbsBlock(monoInOut, numSamples), std::memory_order_relaxed);
     }
 }
 
 void PluginChain::processBlock(float* monoInOut, int numSamples)
 {
-    processMonoBlock(monoInOut, numSamples);
+    processMonoBlock(monoInOut, numSamples, true);
 }
 
 bool PluginChain::addPluginToSlot(int slotIndex,
