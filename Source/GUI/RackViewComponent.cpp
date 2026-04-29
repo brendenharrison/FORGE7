@@ -1068,6 +1068,9 @@ void RackViewComponent::syncEncoderFocus()
     if (appContext.encoderNavigator == nullptr || !isShowing())
         return;
 
+    if (appContext.projectSceneJumpBrowserOpen)
+        return;
+
     if (browserOverlay != nullptr && browserOverlay->isVisible() && pluginBrowser != nullptr)
     {
         pluginBrowser->ensureDefaultListSelectionForEncoder();

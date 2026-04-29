@@ -29,6 +29,9 @@ public:
     /** Rescan library folder and rebuild rows (call when showing). */
     void rescanAndRebuild();
 
+    /** After bounds are valid: finalize list layout and encoder modal chain. Call once when opening. */
+    void onBrowserShown();
+
     void syncEncoderFocus();
 
 private:

@@ -12,11 +12,23 @@
 
 #include "../Controls/EncoderFocusTypes.h"
 #include "../Controls/EncoderNavigator.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
 namespace
 {
+
+constexpr int kCardInsetX = 18;
+constexpr int kCardInsetY = 14;
+constexpr int kTopBarH = 56;
+constexpr int kContextBlockH = 74;
+constexpr int kDirtyBannerH = 24;
+constexpr int kHintBarH = 36;
+
+constexpr int kRowProjectH = 56;
+constexpr int kRowSceneH = 52;
+constexpr int kRowChainH = 46;
 
 juce::String projectRowKey(const ProjectBrowserProjectInfo& p)
 {
@@ -313,29 +325,34 @@ void ProjectSceneBrowserComponent::rebuildFlatRows()
 
 void ProjectSceneBrowserComponent::layoutListGeometry()
 {
-    const int projectH = 56;
-    const int sceneH = 52;
-    const int chainH = 46;
+    const int scrollbarAllowance = 18;
 
-    const int lw = listViewport.getViewWidth() > 0 ? listViewport.getViewWidth() : listViewport.getWidth();
+    const int viewportW = listViewport.getLocalBounds().getWidth();
+
+    const int fallbackW =
+        juce::jmax(320, getWidth() - (kCardInsetX * 2) - scrollbarAllowance - 40);
+
+    const int contentW = viewportW > 0 ? juce::jmax(320, viewportW - scrollbarAllowance) : fallbackW;
 
     int y = 0;
 
     for (auto& row : layoutRows)
     {
-        int h = projectH;
+        int h = kRowProjectH;
 
         if (row.kind == LayoutRow::Kind::Scene)
-            h = sceneH;
+            h = kRowSceneH;
         else if (row.kind == LayoutRow::Kind::Chain)
-            h = chainH;
+            h = kRowChainH;
 
-        row.bounds = juce::Rectangle<int>(0, y, juce::jmax(64, lw), h);
+        row.bounds = juce::Rectangle<int>(0, y, contentW, h);
         y += h;
     }
 
+    const int contentH = juce::jmax(y, listViewport.getHeight());
+
     if (listArea != nullptr)
-        listArea->setSize(juce::jmax(64, lw), juce::jmax(y, 40));
+        listArea->setSize(contentW, contentH);
 
     repaint();
 }
@@ -358,7 +375,16 @@ ProjectSceneBrowserComponent::HitRow ProjectSceneBrowserComponent::hitTestRows(j
 
 void ProjectSceneBrowserComponent::paint(juce::Graphics& g)
 {
-    g.fillAll(juce::Colours::black.withAlpha(0.72f));
+    g.fillAll(juce::Colours::black.withAlpha(0.78f));
+
+    const auto card = getLocalBounds().reduced(kCardInsetX, kCardInsetY).toFloat();
+    const float corner = 12.0f;
+
+    g.setColour(juce::Colour(0xff12161e));
+    g.fillRoundedRectangle(card, corner);
+
+    g.setColour(juce::Colour(0xff2a3544));
+    g.drawRoundedRectangle(card.reduced(0.5f, 0.5f), corner, 1.0f);
 }
 
 void ProjectSceneBrowserComponent::paintList(juce::Graphics& g, const juce::Rectangle<int>& area)
@@ -448,6 +474,8 @@ void ProjectSceneBrowserComponent::moveListFocus(const int delta)
         focusedLogicalRow += logicalRowCount;
 
     focusedLogicalRow %= logicalRowCount;
+
+    Logger::info("FORGE7 JumpBrowser: focused row=" + juce::String(focusedLogicalRow));
 
     if (listArea != nullptr
         && juce::isPositiveAndBelow(focusedLogicalRow, static_cast<int>(layoutRows.size())))
@@ -581,14 +609,14 @@ void ProjectSceneBrowserComponent::activateLogicalRow(const int logicalIndex)
 
 void ProjectSceneBrowserComponent::resized()
 {
-    auto area = getLocalBounds();
+    auto area = getLocalBounds().reduced(kCardInsetX, kCardInsetY);
 
-    auto top = area.removeFromTop(52).reduced(10, 6);
-    backButton.setBounds(top.removeFromLeft(100).reduced(0, 4));
+    auto top = area.removeFromTop(kTopBarH).reduced(10, 8);
+    backButton.setBounds(top.removeFromLeft(100).reduced(0, 6));
     top.removeFromLeft(10);
     titleLabel.setBounds(top);
 
-    auto ctx = area.removeFromTop(76).reduced(12, 4);
+    auto ctx = area.removeFromTop(kContextBlockH).reduced(12, 4);
     contextProjectLabel.setBounds(ctx.removeFromTop(22));
     contextSceneLabel.setBounds(ctx.removeFromTop(22));
     contextChainLabel.setBounds(ctx.removeFromTop(22));
@@ -597,7 +625,7 @@ void ProjectSceneBrowserComponent::resized()
     {
         dirtyBannerLabel.setText("Current project has unsaved changes", juce::dontSendNotification);
         dirtyBannerLabel.setVisible(true);
-        auto d = area.removeFromTop(22).reduced(12, 2);
+        auto d = area.removeFromTop(kDirtyBannerH).reduced(12, 4);
         dirtyBannerLabel.setBounds(d);
     }
     else
@@ -605,7 +633,7 @@ void ProjectSceneBrowserComponent::resized()
         dirtyBannerLabel.setVisible(false);
     }
 
-    hintLabel.setBounds(area.removeFromBottom(34).reduced(12, 4));
+    hintLabel.setBounds(area.removeFromBottom(kHintBarH).reduced(12, 6));
 
     listViewport.setBounds(area.reduced(10, 4));
     layoutListGeometry();
@@ -628,6 +656,22 @@ void ProjectSceneBrowserComponent::resized()
     syncEncoderFocus();
 }
 
+void ProjectSceneBrowserComponent::onBrowserShown()
+{
+    layoutListGeometry();
+    syncEncoderFocus();
+    repaint();
+
+    Logger::info("FORGE7 JumpBrowser: viewport bounds=" + listViewport.getBounds().toString()
+                   + " listArea size="
+                   + (listArea != nullptr
+                          ? juce::String(listArea->getWidth()) + " x " + juce::String(listArea->getHeight())
+                          : juce::String("(null)"))
+                   + " rows=" + juce::String(logicalRowCount));
+    Logger::info("FORGE7 JumpBrowser: open bounds=" + getBounds().toString());
+    Logger::info("FORGE7 JumpBrowser: modal encoder focus set rows=" + juce::String(logicalRowCount));
+}
+
 void ProjectSceneBrowserComponent::syncEncoderFocus()
 {
     if (appContext.encoderNavigator == nullptr)
@@ -635,16 +679,9 @@ void ProjectSceneBrowserComponent::syncEncoderFocus()
 
     std::vector<EncoderFocusItem> items;
 
-    items.push_back({&backButton,
-                     [this]()
-                     {
-                         if (backButton.isEnabled())
-                             backButton.triggerClick();
-                     },
-                     {}});
-
     juce::Component::SafePointer<juce::Component> safeVp(&listViewport);
 
+    /** List viewport first so primary navigation starts on rows; Back secondary. */
     items.push_back(
         {&listViewport,
          [this, safeVp]()
@@ -656,6 +693,14 @@ void ProjectSceneBrowserComponent::syncEncoderFocus()
          {
              moveListFocus(d > 0 ? 1 : (d < 0 ? -1 : 0));
          }});
+
+    items.push_back({&backButton,
+                     [this]()
+                     {
+                         if (backButton.isEnabled())
+                             backButton.triggerClick();
+                     },
+                     {}});
 
     appContext.encoderNavigator->setModalFocusChain(std::move(items));
 }

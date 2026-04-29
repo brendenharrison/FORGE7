@@ -344,6 +344,9 @@ void PerformanceViewComponent::syncEncoderFocus()
     if (appContext.encoderNavigator == nullptr || !isShowing())
         return;
 
+    if (appContext.projectSceneJumpBrowserOpen)
+        return;
+
     std::vector<EncoderFocusItem> items;
 
     items.push_back({ &rackEditButton, [this]() { rackEditButton.triggerClick(); }, {} });

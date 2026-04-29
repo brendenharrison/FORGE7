@@ -159,8 +159,8 @@ void MainComponent::resized()
     {
         projectSceneJumpBrowser->setBounds(bounds);
         encoderNavigator.setBounds(bounds);
-        encoderNavigator.toFront(false);
         projectSceneJumpBrowser->toFront(false);
+        encoderNavigator.toFront(false);
         return;
     }
 
@@ -427,6 +427,12 @@ bool MainComponent::handleGlobalEncoderLongPress()
 
 void MainComponent::showProjectSceneJumpBrowser()
 {
+    appContext.projectSceneJumpBrowserOpen = true;
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    simulatedControlsDrawer.setAlwaysOnTop(false);
+#endif
+
     if (projectSceneJumpBrowser == nullptr)
     {
         projectSceneJumpBrowser = std::make_unique<ProjectSceneBrowserComponent>(
@@ -440,10 +446,15 @@ void MainComponent::showProjectSceneJumpBrowser()
     }
 
     projectSceneJumpBrowser->setVisible(true);
-    projectSceneJumpBrowser->rescanAndRebuild();
     resized();
+
+    projectSceneJumpBrowser->rescanAndRebuild();
+    projectSceneJumpBrowser->onBrowserShown();
+
     projectSceneJumpBrowser->toFront(false);
     encoderNavigator.toFront(false);
+
+    Logger::info("FORGE7 JumpBrowser: open bounds=" + getLocalBounds().toString());
 }
 
 void MainComponent::closeProjectSceneJumpBrowser()
@@ -452,6 +463,12 @@ void MainComponent::closeProjectSceneJumpBrowser()
         return;
 
     projectSceneJumpBrowser->setVisible(false);
+    appContext.projectSceneJumpBrowserOpen = false;
+
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    if (simulatedControlsPanelVisible)
+        simulatedControlsDrawer.setAlwaysOnTop(true);
+#endif
 
     if (appContext.encoderNavigator != nullptr)
         appContext.encoderNavigator->clearModalFocusChain();

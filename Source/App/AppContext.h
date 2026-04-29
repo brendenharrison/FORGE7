@@ -55,6 +55,9 @@ struct AppContext
 
     /** When set, encoder long-press is handled here first (e.g. modal back/dismiss). Return true if consumed. */
     std::function<bool()> tryConsumeEncoderLongPress;
+
+    /** Set by MainComponent while Project/Scene Jump Browser is visible (message thread). */
+    bool projectSceneJumpBrowserOpen = false;
 };
 
 } // namespace forge7
