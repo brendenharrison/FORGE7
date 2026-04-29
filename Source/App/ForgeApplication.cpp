@@ -119,6 +119,16 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     Logger::info("FORGE7 AudioIO: device state xml len="
                  + juce::String(appConfig != nullptr ? appConfig->getAudioDeviceStateXml().length() : 0));
 
+    if (audioEngine != nullptr)
+    {
+        audioEngine->logAudioInputDiagnostics("startup");
+        juce::MessageManager::callAsync([ae = audioEngine.get()]
+                                        {
+                                            if (ae != nullptr)
+                                                ae->logAudioInputDiagnostics("after_message_loop");
+                                        });
+    }
+
     controlManager = std::make_unique<ControlManager>(*parameterMappingManager);
     projectSerializer = std::make_unique<ProjectSerializer>(*sceneManager,
                                                                *parameterMappingManager,

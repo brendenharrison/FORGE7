@@ -2,6 +2,8 @@
 
 #include <JuceHeader.h>
 
+#include <fstream>
+
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "../PluginHost/PluginHostManager.h"
@@ -15,6 +17,29 @@ constexpr int kPreferredBufferSize = 64;
 constexpr int kFallbackBufferSize = 128;
 constexpr double kTargetSampleRate = 48000.0;
 constexpr float kMaxLinearGain = 4.0f;
+
+// #region agent log
+// Tiny NDJSON appender for debug session af0f62 - message thread only.
+// Path is provisioned by the debug harness; misses are silent.
+void debugNdjsonAppend(const juce::String& location,
+                       const juce::String& message,
+                       const juce::var& data,
+                       const juce::String& hypothesisId)
+{
+    static const juce::String kPath { "/Users/brendenharrison/Forge_7/.cursor/debug-af0f62.log" };
+    juce::DynamicObject::Ptr obj { new juce::DynamicObject() };
+    obj->setProperty("sessionId", "af0f62");
+    obj->setProperty("timestamp", (juce::int64) juce::Time::getCurrentTime().toMilliseconds());
+    obj->setProperty("location", location);
+    obj->setProperty("message", message);
+    obj->setProperty("data", data);
+    obj->setProperty("hypothesisId", hypothesisId);
+    const juce::String line = juce::JSON::toString(juce::var(obj.get()), true) + "\n";
+    std::ofstream f(kPath.toStdString(), std::ios::app);
+    if (f.is_open())
+        f << line.toStdString();
+}
+// #endregion
 } // namespace
 
 AudioEngine::AudioEngine(PluginHostManager& host)
@@ -101,9 +126,40 @@ void AudioEngine::initialiseAudioDeviceFromConfig(const juce::String& savedDevic
     deviceManager.addAudioCallback(this);
 
     if (auto* device = deviceManager.getCurrentAudioDevice())
-        Logger::info("AudioEngine: active device - " + device->getName());
+    {
+        juce::AudioDeviceManager::AudioDeviceSetup activeSetup;
+        deviceManager.getAudioDeviceSetup(activeSetup);
+
+        Logger::info("AudioEngine: active device - " + device->getName()
+                     + " | type=" + deviceManager.getCurrentAudioDeviceType()
+                     + " | inputDevice=\"" + activeSetup.inputDeviceName + "\""
+                     + " | outputDevice=\"" + activeSetup.outputDeviceName + "\""
+                     + " | inMask=" + activeSetup.inputChannels.toString(2)
+                     + " | outMask=" + activeSetup.outputChannels.toString(2)
+                     + " | sr=" + juce::String(activeSetup.sampleRate, 1)
+                     + " | block=" + juce::String(activeSetup.bufferSize));
+
+        // #region agent log
+        juce::DynamicObject::Ptr d { new juce::DynamicObject() };
+        d->setProperty("inputDeviceName", activeSetup.inputDeviceName);
+        d->setProperty("outputDeviceName", activeSetup.outputDeviceName);
+        d->setProperty("inputChannelsMask", activeSetup.inputChannels.toString(2));
+        d->setProperty("outputChannelsMask", activeSetup.outputChannels.toString(2));
+        d->setProperty("inputChannelsBitCount", activeSetup.inputChannels.countNumberOfSetBits());
+        d->setProperty("outputChannelsBitCount", activeSetup.outputChannels.countNumberOfSetBits());
+        d->setProperty("sampleRate", activeSetup.sampleRate);
+        d->setProperty("bufferSize", activeSetup.bufferSize);
+        d->setProperty("deviceTypeName", deviceManager.getCurrentAudioDeviceType());
+        debugNdjsonAppend("AudioEngine.cpp:setupComplete", "device setup after init/restore", juce::var(d.get()), "H2,H5");
+        // #endregion
+    }
     else
+    {
         Logger::error("AudioEngine: no audio device is active after setup");
+        // #region agent log
+        debugNdjsonAppend("AudioEngine.cpp:setupComplete", "no active device after setup", juce::var(), "H2");
+        // #endregion
+    }
 }
 
 void AudioEngine::shutdownAudio()
@@ -112,6 +168,32 @@ void AudioEngine::shutdownAudio()
     deviceManager.removeAudioCallback(this);
     deviceManager.closeAudioDevice();
     Logger::info("AudioEngine: audio shutdown complete");
+}
+
+void AudioEngine::logAudioInputDiagnostics(const juce::String& reason) noexcept
+{
+    // Message thread only (never call from audio callback).
+    juce::AudioDeviceManager::AudioDeviceSetup setup;
+    deviceManager.getAudioDeviceSetup(setup);
+
+    Logger::info("FORGE7 AudioIO diagnostic [" + reason + "] setup input=\"" + setup.inputDeviceName + "\" output=\""
+                   + setup.outputDeviceName + "\" inMask=" + setup.inputChannels.toString(2) + " outMask="
+                   + setup.outputChannels.toString(2) + " sr=" + juce::String(setup.sampleRate, 1) + " buffer="
+                   + juce::String(setup.bufferSize));
+
+    if (auto* dev = deviceManager.getCurrentAudioDevice())
+    {
+        Logger::info("FORGE7 AudioIO diagnostic [" + reason + "] openDevice=\"" + dev->getName() + "\" activeInMask="
+                     + dev->getActiveInputChannels().toString(2) + " activeOutMask="
+                     + dev->getActiveOutputChannels().toString(2));
+    }
+    else
+        Logger::info("FORGE7 AudioIO diagnostic [" + reason + "] openDevice=(none)");
+
+    Logger::info("FORGE7 AudioIO diagnostic [" + reason + "] callback inputPresent="
+                 + juce::String(isInputPresentInCallback() ? "yes" : "no") + " selectedInputCh="
+                 + juce::String(getLastSelectedInputChannel()) + " mixedInputs="
+                 + juce::String(getLastMixedInputChannelCount()));
 }
 
 void AudioEngine::setInputGainLinear(float linearGain)
@@ -127,6 +209,11 @@ void AudioEngine::setOutputGainLinear(float linearGain)
 void AudioEngine::setGlobalBypass(bool shouldBypass)
 {
     globalBypass.store(shouldBypass ? 1u : 0u, std::memory_order_relaxed);
+}
+
+void AudioEngine::setInputMonitorEnabled(bool shouldMonitor)
+{
+    inputMonitorEnabled.store(shouldMonitor ? 1u : 0u, std::memory_order_relaxed);
 }
 
 float AudioEngine::clampGain(float g) noexcept
@@ -147,8 +234,17 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
     audioCallbackInvocationCount.fetch_add(1, std::memory_order_relaxed);
 
+    lastNumInputChannels.store(juce::jmax(0, numInputChannels), std::memory_order_relaxed);
+    lastNumOutputChannels.store(juce::jmax(0, numOutputChannels), std::memory_order_relaxed);
+
     if (outputChannelData == nullptr || numOutputChannels <= 0 || numSamples <= 0)
+    {
+        lastSelectedInputChannel.store(-1, std::memory_order_relaxed);
+        lastMixedInputChannelCount.store(0, std::memory_order_relaxed);
+        inputPresentFlag.store(0u, std::memory_order_relaxed);
+        meterInputPeakRaw.store(0.0f, std::memory_order_relaxed);
         return;
+    }
 
     if (monoWorkBufferCapacity < numSamples)
     {
@@ -157,21 +253,66 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
         if (once.fetch_add(1, std::memory_order_relaxed) == 0)
             DBG("AudioEngine: callback block larger than prepared mono buffer - dropping audio");
 #endif
+        lastSelectedInputChannel.store(-1, std::memory_order_relaxed);
+        lastMixedInputChannelCount.store(0, std::memory_order_relaxed);
+        inputPresentFlag.store(0u, std::memory_order_relaxed);
+        meterInputPeakRaw.store(0.0f, std::memory_order_relaxed);
         return;
     }
 
     float* mono = monoWorkBuffer.data();
 
-    const float* inMono = (inputChannelData != nullptr && numInputChannels > 0 && inputChannelData[0] != nullptr) ? inputChannelData[0] : nullptr;
+    int selectedInputChannel = -1;
+    int mixedCount = 0;
+
+    float rawPeakPreGain = 0.0f;
 
     const float inGain = inputGainLinear.load(std::memory_order_relaxed);
+
+    if (inputChannelData != nullptr)
+    {
+        for (int ch = 0; ch < numInputChannels; ++ch)
+        {
+            const float* inCh = inputChannelData[ch];
+            if (inCh == nullptr)
+                continue;
+
+            float chPeak = 0.0f;
+            for (int i = 0; i < numSamples; ++i)
+                chPeak = juce::jmax(chPeak, std::abs(inCh[i]));
+
+            rawPeakPreGain = juce::jmax(rawPeakPreGain, chPeak);
+
+            if (mixedCount == 0)
+            {
+                selectedInputChannel = ch;
+                juce::FloatVectorOperations::copyWithMultiply(mono, inCh, inGain, numSamples);
+            }
+            else
+                juce::FloatVectorOperations::addWithMultiply(mono, inCh, inGain, numSamples);
+
+            ++mixedCount;
+        }
+    }
+
+    meterInputPeakRaw.store(juce::jlimit(0.0f, 1.0f, rawPeakPreGain), std::memory_order_relaxed);
+
+    if (mixedCount > 1)
+    {
+        const float scale = 1.0f / static_cast<float>(mixedCount);
+        juce::FloatVectorOperations::multiply(mono, scale, numSamples);
+    }
+
+    lastSelectedInputChannel.store(selectedInputChannel, std::memory_order_relaxed);
+    lastMixedInputChannelCount.store(mixedCount, std::memory_order_relaxed);
+    inputPresentFlag.store(mixedCount > 0 ? 1u : 0u, std::memory_order_relaxed);
+
+    if (mixedCount == 0)
+        juce::FloatVectorOperations::clear(mono, numSamples);
+
     const float outGain = outputGainLinear.load(std::memory_order_relaxed);
     const bool bypassChain = globalBypass.load(std::memory_order_relaxed) != 0;
-
-    if (inMono != nullptr)
-        juce::FloatVectorOperations::copyWithMultiply(mono, inMono, inGain, numSamples);
-    else
-        juce::FloatVectorOperations::clear(mono, numSamples);
+    const bool monitorOn = inputMonitorEnabled.load(std::memory_order_relaxed) != 0;
 
     float inPeak = 0.0f;
     for (int i = 0; i < numSamples; ++i)
@@ -197,19 +338,36 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     }
 
     meterInputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
-    meterOutputPeak.store(juce::jlimit(0.0f, 1.0f, outPeak), std::memory_order_relaxed);
+    meterOutputPeak.store(monitorOn ? juce::jlimit(0.0f, 1.0f, outPeak) : 0.0f, std::memory_order_relaxed);
 
     for (int ch = 0; ch < numOutputChannels; ++ch)
         if (outputChannelData[ch] != nullptr)
             juce::FloatVectorOperations::clear(outputChannelData[ch], numSamples);
 
-    float* outL = outputChannelData[0];
-    float* outR = numOutputChannels > 1 ? outputChannelData[1] : outL;
+    if (! monitorOn)
+        return; // outputs already silenced; live monitor disabled
 
-    if (outL != nullptr)
-        juce::FloatVectorOperations::copy(outL, mono, numSamples);
-    if (outR != nullptr && outR != outL)
-        juce::FloatVectorOperations::copy(outR, mono, numSamples);
+    float* outPrimary = nullptr;
+    float* outSecondary = nullptr;
+
+    for (int ch = 0; ch < numOutputChannels; ++ch)
+    {
+        if (outputChannelData[ch] == nullptr)
+            continue;
+
+        if (outPrimary == nullptr)
+            outPrimary = outputChannelData[ch];
+        else if (outSecondary == nullptr)
+        {
+            outSecondary = outputChannelData[ch];
+            break;
+        }
+    }
+
+    if (outPrimary != nullptr)
+        juce::FloatVectorOperations::copy(outPrimary, mono, numSamples);
+    if (outSecondary != nullptr && outSecondary != outPrimary)
+        juce::FloatVectorOperations::copy(outSecondary, mono, numSamples);
 }
 
 void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
@@ -235,10 +393,37 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
     pluginHostManager.prepareToPlay(sr, block);
 
     const int cap = monoWorkBufferCapacity;
-    juce::MessageManager::callAsync([sr, block, cap]()
+    const juce::String deviceName = device->getName();
+    const juce::StringArray inputChannelNames = device->getInputChannelNames();
+    const juce::StringArray outputChannelNames = device->getOutputChannelNames();
+    const juce::BigInteger activeInputs = device->getActiveInputChannels();
+    const juce::BigInteger activeOutputs = device->getActiveOutputChannels();
+
+    juce::MessageManager::callAsync([sr, block, cap, deviceName, inputChannelNames, outputChannelNames, activeInputs, activeOutputs]()
                                     {
-                                        Logger::info("AudioEngine: stream starting - SR " + juce::String(sr, 1) + " Hz, block "
-                                                     + juce::String(block) + " samples, mono work capacity " + juce::String(cap));
+                                        Logger::info("AudioEngine: stream starting - device \"" + deviceName + "\""
+                                                     + " | SR " + juce::String(sr, 1) + " Hz | block " + juce::String(block)
+                                                     + " | mono work capacity " + juce::String(cap)
+                                                     + " | activeIn=" + activeInputs.toString(2)
+                                                     + " | activeOut=" + activeOutputs.toString(2)
+                                                     + " | inNames=[" + inputChannelNames.joinIntoString(", ") + "]"
+                                                     + " | outNames=[" + outputChannelNames.joinIntoString(", ") + "]");
+
+                                        // #region agent log
+                                        juce::DynamicObject::Ptr d { new juce::DynamicObject() };
+                                        d->setProperty("deviceName", deviceName);
+                                        d->setProperty("sampleRate", sr);
+                                        d->setProperty("bufferSize", block);
+                                        d->setProperty("monoWorkCapacity", cap);
+                                        d->setProperty("activeInputs", activeInputs.toString(2));
+                                        d->setProperty("activeOutputs", activeOutputs.toString(2));
+                                        d->setProperty("activeInputCount", activeInputs.countNumberOfSetBits());
+                                        d->setProperty("activeOutputCount", activeOutputs.countNumberOfSetBits());
+                                        d->setProperty("inputChannelNames", inputChannelNames.joinIntoString("|"));
+                                        d->setProperty("outputChannelNames", outputChannelNames.joinIntoString("|"));
+                                        debugNdjsonAppend("AudioEngine.cpp:audioDeviceAboutToStart", "stream starting",
+                                                          juce::var(d.get()), "H2,H3,H4");
+                                        // #endregion
                                     });
 }
 
@@ -247,7 +432,13 @@ void AudioEngine::audioDeviceStopped()
     // Typically audio thread / device thread; avoid logging here (can be problematic on some stacks).
     pluginHostManager.releaseResources();
     meterInputPeak.store(0.0f, std::memory_order_relaxed);
+    meterInputPeakRaw.store(0.0f, std::memory_order_relaxed);
     meterOutputPeak.store(0.0f, std::memory_order_relaxed);
+    lastSelectedInputChannel.store(-1, std::memory_order_relaxed);
+    lastMixedInputChannelCount.store(0, std::memory_order_relaxed);
+    lastNumInputChannels.store(0, std::memory_order_relaxed);
+    lastNumOutputChannels.store(0, std::memory_order_relaxed);
+    inputPresentFlag.store(0u, std::memory_order_relaxed);
 }
 
 } // namespace forge7

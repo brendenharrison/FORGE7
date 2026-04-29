@@ -27,7 +27,17 @@ juce_add_gui_app(Forge7
     COMPANY_NAME "FORGE"
     PRODUCT_NAME "FORGE 7"
     VERSION ${PROJECT_VERSION}
+    PLIST_TO_MERGE "${CMAKE_CURRENT_SOURCE_DIR}/cmake/Info-Microphone.plist"
+    MICROPHONE_PERMISSION_ENABLED TRUE
+    MICROPHONE_PERMISSION_TEXT "FORGE7 needs audio input access to process live guitar and audio input."
 )
+
+# Reinforce JUCE target properties on Apple so juceaide always sees microphone + merged plist.
+if(APPLE)
+    set_target_properties(Forge7 PROPERTIES
+        JUCE_MICROPHONE_PERMISSION_ENABLED TRUE
+        JUCE_MICROPHONE_PERMISSION_TEXT "FORGE7 needs audio input access to process live guitar and audio input.")
+endif()
 
 juce_generate_juce_header(Forge7)
 

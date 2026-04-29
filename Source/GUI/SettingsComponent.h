@@ -49,14 +49,30 @@ private:
     juce::Label deviceTypeLabel;
     juce::Label inputDeviceLabel;
     juce::Label outputDeviceLabel;
+    juce::Label callbackDeviceLabel;
+    juce::Label inputChannelsLabel;
+    juce::Label outputChannelsLabel;
+    juce::Label callbackChannelsLabel;
+    juce::Label selectedInputLabel;
+    juce::Label mixedInputLabel;
+    juce::Label inputGainLabel;
+    juce::Label rawInputPeakLabel;
+    juce::Label inputPresentLabel;
+    juce::Label inputWarningLabel;
     juce::Label sampleRateLabel;
     juce::Label bufferSizeLabel;
     juce::Label cpuLabel;
     juce::Label callbackCountLabel;
 
+    juce::ToggleButton inputMonitorToggle { "Input Monitor" };
+    juce::Label monitorHintLabel;
+    juce::Label testToneHintLabel;
+
     std::unique_ptr<LevelMeter> inputMeter;
     std::unique_ptr<LevelMeter> outputMeter;
     juce::Label meterHintLabel;
+
+    int diagnosticTickCount { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(SettingsComponent)
 };
