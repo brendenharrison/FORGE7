@@ -2,6 +2,10 @@
 cmake_minimum_required(VERSION 3.22)
 project(Forge7 VERSION 0.1.0 LANGUAGES CXX)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -48,9 +52,10 @@ list(TRANSFORM FORGE7_SOURCES PREPEND "${CMAKE_CURRENT_SOURCE_DIR}/Source/"
 target_sources(Forge7 PRIVATE ${FORGE7_SOURCES_ABS})
 
 if(APPLE)
-    target_sources(Forge7 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Platform/MacAudioPermission.mm")
-else()
-    target_sources(Forge7 PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Source/Platform/MacAudioPermission.cpp")
+    set_source_files_properties(
+        "${CMAKE_CURRENT_SOURCE_DIR}/Source/Platform/MacAudioPermission.mm"
+        PROPERTIES LANGUAGE OBJCXX
+    )
 endif()
 
 target_include_directories(Forge7 PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/Source)

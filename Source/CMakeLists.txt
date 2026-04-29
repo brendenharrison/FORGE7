@@ -45,6 +45,12 @@ set(FORGE7_SOURCES
     GUI/LevelMeter.cpp
 
     Utilities/Logger.cpp
-
-    PARENT_SCOPE
 )
+
+if(APPLE)
+    list(APPEND FORGE7_SOURCES Platform/MacAudioPermission.mm)
+else()
+    list(APPEND FORGE7_SOURCES Platform/MacAudioPermission.cpp)
+endif()
+
+set(FORGE7_SOURCES ${FORGE7_SOURCES} PARENT_SCOPE)
