@@ -57,6 +57,19 @@ private:
     void layoutRackChain();
     void wireSlotCallbacks(int slotIndex);
     void setSelectedSlot(int slotIndex);
+    void setVisualFocusedSlot(int slotIndex);
+    void clearVisualSlotHighlights();
+    void ensureRackChainItemVisible(juce::Component& item);
+
+    enum class RackFocusKind
+    {
+        TopRow,
+        VstSlot,
+        AddPlugin,
+        ContextRow,
+        BottomRow
+    };
+    void handleEncoderFocusForRackItem(RackFocusKind kind, juce::Component* target, int slotIndex = -1);
 
     /** Overlay hidden; rollback pending add state only when `cancelled` is true. */
     void dismissPluginBrowserOverlay(bool cancelled);
@@ -91,6 +104,8 @@ private:
     AppContext& appContext;
 
     int selectedSlotIndex { -1 };
+    int visualFocusedSlotIndex { -1 };
+    RackFocusKind lastEncoderFocusKind { RackFocusKind::TopRow };
     int pendingAddSlotIndex { -1 };
     int selectionBeforePendingAdd { -1 };
     BrowserOpenReason browserOpenReason { BrowserOpenReason::None };
