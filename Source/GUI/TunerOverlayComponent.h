@@ -1,6 +1,8 @@
 #pragma once
 
-#include <memory>
+#include <array>
+#include <cstdint>
+#include <functional>
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -26,6 +28,9 @@ public:
 
 private:
     void timerCallback() override;
+    void resetSmoothingState() noexcept;
+    float medianRecentCents() const noexcept;
+    static int midiNoteFromHz(float hz) noexcept;
 
     AppContext& appContext;
     std::function<void()> onRequestClose;
@@ -43,6 +48,23 @@ private:
     std::vector<float> analysisScratch;
 
     juce::Rectangle<int> needleMeterArea;
+
+    /** Smoothed needle / labels */
+    float displayedCents { 0.0f };
+    int stableDisplayedMidi { -1 };
+    int pendingMidi { -1 };
+    int pendingFrames { 0 };
+    bool snapDisplayCentsNext { false };
+
+    std::array<float, 5> centsRing {};
+    int centsWriteIdx { 0 };
+    int centsRingCount { 0 };
+
+    uint32_t clipHoldUntilMs { 0 };
+
+    bool weakSignalFrame { false };
+    /** Valid only after last timer tick; used by paint for needle state. */
+    bool needleDrawActive { false };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TunerOverlayComponent)
 };

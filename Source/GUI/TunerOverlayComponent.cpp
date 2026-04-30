@@ -1,9 +1,9 @@
 #include "TunerOverlayComponent.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "../App/AppContext.h"
-#include "../App/AppConfig.h"
 #include "../Audio/AudioEngine.h"
 #include "../Controls/EncoderFocusTypes.h"
 #include "../Controls/EncoderNavigator.h"
@@ -19,7 +19,66 @@ juce::Colour good() noexcept { return juce::Colour(0xff4caf50); }
 juce::Colour warn() noexcept { return juce::Colour(0xffffc44d); }
 juce::Colour bad() noexcept { return juce::Colour(0xffff5252); }
 juce::Colour muted() noexcept { return juce::Colour(0xff8a9099); }
+
+constexpr float kSmoothAlpha = 0.38f;
+constexpr float kSmoothCatchUp = 0.52f;
+constexpr float kLargeJumpCents = 22.0f;
+constexpr float kDecayNoSignal = 0.16f;
+constexpr float kConfidenceFloor = 0.12f;
+constexpr float kClipThreshold = 0.98f;
+constexpr uint32_t kClipHoldMs = 1200;
+constexpr int kFramesToLockNote = 2;
+
+static const char* noteLetterFromMidi(int midi) noexcept
+{
+    static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    const int idx = (midi % 12 + 12) % 12;
+    return names[idx];
+}
 } // namespace
+
+int TunerOverlayComponent::midiNoteFromHz(const float hz) noexcept
+{
+    if (hz <= 1.0f || !std::isfinite(hz))
+        return -1;
+
+    const float midiFloat = 69.0f + 12.0f * std::log2(hz / 440.0f);
+    return static_cast<int>(std::lround(static_cast<double>(midiFloat)));
+}
+
+void TunerOverlayComponent::resetSmoothingState() noexcept
+{
+    displayedCents = 0.0f;
+    stableDisplayedMidi = -1;
+    pendingMidi = -1;
+    pendingFrames = 0;
+    snapDisplayCentsNext = false;
+    centsWriteIdx = 0;
+    centsRingCount = 0;
+    centsRing.fill(0.0f);
+    weakSignalFrame = false;
+    clipHoldUntilMs = 0;
+    needleDrawActive = false;
+}
+
+float TunerOverlayComponent::medianRecentCents() const noexcept
+{
+    if (centsRingCount <= 0)
+        return 0.0f;
+
+    float tmp[5];
+    const int n = juce::jmin(5, centsRingCount);
+
+    for (int i = 0; i < n; ++i)
+        tmp[i] = centsRing[static_cast<size_t>((centsWriteIdx - 1 - i + 500) % 5)];
+
+    std::sort(tmp, tmp + n);
+
+    if ((n % 2) == 1)
+        return tmp[n / 2];
+
+    return 0.5f * (tmp[n / 2 - 1] + tmp[n / 2]);
+}
 
 TunerOverlayComponent::TunerOverlayComponent(AppContext& context, std::function<void()> closeHandler)
     : appContext(context)
@@ -77,7 +136,7 @@ TunerOverlayComponent::TunerOverlayComponent(AppContext& context, std::function<
 
     analysisScratch.resize(4096, 0.0f);
 
-    startTimerHz(25);
+    startTimerHz(40);
 }
 
 TunerOverlayComponent::~TunerOverlayComponent()
@@ -88,6 +147,9 @@ TunerOverlayComponent::~TunerOverlayComponent()
 void TunerOverlayComponent::visibilityChanged()
 {
     juce::Component::visibilityChanged();
+
+    if (isShowing())
+        resetSmoothingState();
 
     if (appContext.encoderNavigator == nullptr)
         return;
@@ -118,29 +180,119 @@ void TunerOverlayComponent::timerCallback()
     const int n = appContext.audioEngine->copyTunerMonoSnapshot(analysisScratch.data(),
                                                                 static_cast<int>(analysisScratch.size()));
 
-    if (n <= 0)
-        return;
-
     const double sr = appContext.audioEngine->getCurrentSampleRate();
-    lastState = TunerPitchAnalyzer::analyze(analysisScratch.data(), n, sr);
+    const float rawPeak = appContext.audioEngine->getLastInputPeakRaw();
 
-    if (!lastState.signalPresent)
+    const uint32_t nowMs = juce::Time::getApproximateMillisecondCounter();
+
+    if (rawPeak >= kClipThreshold)
+        clipHoldUntilMs = nowMs + kClipHoldMs;
+
+    weakSignalFrame = false;
+
+    if (n <= 0)
     {
+        lastState = {};
+        needleDrawActive = false;
+        displayedCents *= (1.0f - kDecayNoSignal);
         noteNameLabel.setText("-", juce::dontSendNotification);
         octaveLabel.setText("", juce::dontSendNotification);
         centsLabel.setText("", juce::dontSendNotification);
         statusLabel.setText("No signal", juce::dontSendNotification);
         statusLabel.setColour(juce::Label::textColourId, bad());
+        repaint();
+        return;
+    }
+
+    lastState = TunerPitchAnalyzer::analyze(analysisScratch.data(), n, sr);
+
+    if (!lastState.signalPresent)
+    {
+        needleDrawActive = false;
+        displayedCents *= (1.0f - kDecayNoSignal);
+        noteNameLabel.setText("-", juce::dontSendNotification);
+        octaveLabel.setText("", juce::dontSendNotification);
+        centsLabel.setText("", juce::dontSendNotification);
+        statusLabel.setText("No signal", juce::dontSendNotification);
+        statusLabel.setColour(juce::Label::textColourId, bad());
+        repaint();
+        return;
+    }
+
+    if (lastState.confidence < kConfidenceFloor)
+        weakSignalFrame = true;
+
+    const int candidateMidi = midiNoteFromHz(lastState.frequencyHz);
+
+    if (candidateMidi != pendingMidi)
+    {
+        pendingMidi = candidateMidi;
+        pendingFrames = 1;
     }
     else
     {
-        noteNameLabel.setText(lastState.noteName, juce::dontSendNotification);
-        octaveLabel.setText(juce::String(lastState.octave), juce::dontSendNotification);
+        ++pendingFrames;
+    }
 
-        const int centsRounded = static_cast<int>(std::lround(static_cast<double>(lastState.centsOffset)));
+    const bool lockedNote = (pendingFrames >= kFramesToLockNote && candidateMidi == pendingMidi);
+
+    if (lockedNote && stableDisplayedMidi != pendingMidi)
+    {
+        stableDisplayedMidi = pendingMidi;
+        centsRingCount = 0;
+        centsWriteIdx = 0;
+        centsRing.fill(0.0f);
+        snapDisplayCentsNext = true;
+    }
+
+    if (lockedNote && stableDisplayedMidi >= 0 && lastState.confidence >= kConfidenceFloor && !weakSignalFrame)
+    {
+        centsRing[static_cast<size_t>(centsWriteIdx % 5)] = lastState.centsOffset;
+        ++centsWriteIdx;
+        centsRingCount = juce::jmin(5, centsRingCount + 1);
+    }
+
+    float targetCents = lastState.centsOffset;
+
+    if (centsRingCount >= 3)
+        targetCents = medianRecentCents();
+
+    if (snapDisplayCentsNext)
+    {
+        displayedCents = targetCents;
+        snapDisplayCentsNext = false;
+    }
+    else
+    {
+        float alpha = kSmoothAlpha;
+
+        if (std::abs(targetCents - displayedCents) > kLargeJumpCents)
+            alpha = kSmoothCatchUp;
+
+        displayedCents += (targetCents - displayedCents) * alpha;
+    }
+
+    if (weakSignalFrame)
+    {
+        noteNameLabel.setColour(juce::Label::textColourId, muted());
+        octaveLabel.setColour(juce::Label::textColourId, muted());
+        centsLabel.setColour(juce::Label::textColourId, muted());
+        statusLabel.setText("Listening...", juce::dontSendNotification);
+        statusLabel.setColour(juce::Label::textColourId, muted());
+    }
+    else if (stableDisplayedMidi >= 0 && lockedNote)
+    {
+        noteNameLabel.setColour(juce::Label::textColourId, text());
+        octaveLabel.setColour(juce::Label::textColourId, text());
+        centsLabel.setColour(juce::Label::textColourId, text());
+
+        noteNameLabel.setText(noteLetterFromMidi(stableDisplayedMidi), juce::dontSendNotification);
+        octaveLabel.setText(juce::String((stableDisplayedMidi / 12) - 1), juce::dontSendNotification);
+
+        const int centsRounded = static_cast<int>(std::lround(static_cast<double>(displayedCents)));
         centsLabel.setText(juce::String(centsRounded) + " cents", juce::dontSendNotification);
 
-        const float ac = std::abs(lastState.centsOffset);
+        const float ac = std::abs(displayedCents);
         juce::String status;
 
         if (ac <= 3.0f)
@@ -150,21 +302,31 @@ void TunerOverlayComponent::timerCallback()
         }
         else if (ac <= 10.0f)
         {
-            status = lastState.centsOffset < 0.0f ? "Flat (close)" : "Sharp (close)";
+            status = displayedCents < 0.0f ? "Flat (close)" : "Sharp (close)";
             statusLabel.setColour(juce::Label::textColourId, warn());
         }
         else
         {
-            status = lastState.centsOffset < 0.0f ? "Flat" : "Sharp";
+            status = displayedCents < 0.0f ? "Flat" : "Sharp";
             statusLabel.setColour(juce::Label::textColourId, bad());
         }
 
         statusLabel.setText(status, juce::dontSendNotification);
     }
+    else
+    {
+        noteNameLabel.setText("-", juce::dontSendNotification);
+        octaveLabel.setText("", juce::dontSendNotification);
+        centsLabel.setText("", juce::dontSendNotification);
+        statusLabel.setText("Listening...", juce::dontSendNotification);
+        statusLabel.setColour(juce::Label::textColourId, muted());
+    }
 
     juce::String foot = "Chain - + Chain + toggles tuner | Encoder long press closes | Input ";
     foot += (appContext.audioEngine != nullptr && appContext.audioEngine->getTunerMutesOutput()) ? "Muted" : "Thru";
     footnoteLabel.setText(foot, juce::dontSendNotification);
+
+    needleDrawActive = lastState.signalPresent && !weakSignalFrame && stableDisplayedMidi >= 0 && lockedNote;
 
     repaint();
 }
@@ -177,7 +339,7 @@ void TunerOverlayComponent::paint(juce::Graphics& g)
         return;
 
     auto block = needleMeterArea.toFloat().reduced(6.0f, 4.0f);
-    auto levelZone = block.removeFromBottom(12.0f);
+    auto levelZone = block.removeFromBottom(26.0f);
     auto needleBand = block;
 
     g.setColour(juce::Colour(0xff1e252e));
@@ -188,33 +350,88 @@ void TunerOverlayComponent::paint(juce::Graphics& g)
     const float cx = needleBand.getCentreX();
     const float wFull = needleMeterArea.toFloat().getWidth();
     const float inTuneHalf = wFull * 0.06f;
-    g.setColour(good().withAlpha(0.35f));
+
+    g.setColour(good().withAlpha(0.28f));
     g.fillRoundedRectangle(juce::Rectangle<float>(cx - inTuneHalf, needleBand.getY(), inTuneHalf * 2.0f, needleBand.getHeight()),
                            6.0f);
+
+    g.setColour(accent().withAlpha(0.45f));
+    g.fillRect(juce::Rectangle<float>(cx - 1.2f, needleBand.getY(), 2.4f, needleBand.getHeight()));
 
     auto labelBand = needleBand;
     const float w = needleBand.getWidth();
 
     g.setColour(muted());
     g.setFont(juce::Font(14.0f));
-    g.drawText("FLAT", labelBand.removeFromLeft(w * 0.15f), juce::Justification::centredLeft, false);
-    g.drawText("SHARP", labelBand.removeFromRight(w * 0.15f), juce::Justification::centredRight, false);
+    g.drawText("FLAT", labelBand.removeFromLeft(w * 0.14f), juce::Justification::centredLeft, false);
+    g.drawText("SHARP", labelBand.removeFromRight(w * 0.14f), juce::Justification::centredRight, false);
 
-    float centsForNeedle = lastState.signalPresent ? lastState.centsOffset : 0.0f;
-    centsForNeedle = juce::jlimit(-50.0f, 50.0f, centsForNeedle);
-    const float t = (centsForNeedle + 50.0f) / 100.0f;
+    float centsDraw = needleDrawActive ? displayedCents : 0.0f;
+    centsDraw = juce::jlimit(-50.0f, 50.0f, centsDraw);
+    const float t = (centsDraw + 50.0f) / 100.0f;
     const float nx = labelBand.getX() + t * labelBand.getWidth();
 
-    g.setColour(juce::Colours::white);
-    g.fillRoundedRectangle(
-        juce::Rectangle<float>(4.0f, labelBand.getHeight() * 0.88f).withCentre({ nx, labelBand.getCentreY() }),
-        2.0f);
+    juce::Colour needleCol = juce::Colours::white;
 
-    g.setColour(juce::Colour(0xff1e252e));
-    g.fillRoundedRectangle(levelZone, 4.0f);
-    const float lvl = juce::jlimit(0.0f, 1.0f, lastState.inputLevel);
-    g.setColour(accent());
-    g.fillRoundedRectangle(levelZone.withWidth(levelZone.getWidth() * lvl), 4.0f);
+    if (needleDrawActive)
+    {
+        const float ac = std::abs(displayedCents);
+
+        if (ac <= 3.0f)
+            needleCol = good().brighter(0.05f);
+        else if (ac <= 10.0f)
+            needleCol = warn();
+        else
+            needleCol = bad();
+    }
+    else
+        needleCol = juce::Colours::white.withAlpha(0.35f);
+
+    g.setColour(needleCol);
+    g.fillRoundedRectangle(
+        juce::Rectangle<float>(5.0f, labelBand.getHeight() * 0.88f).withCentre({ nx, labelBand.getCentreY() }),
+        2.5f);
+
+    /* Centered outward level meter */
+    g.setColour(juce::Colour(0xff151a21));
+    g.fillRoundedRectangle(levelZone, 5.0f);
+    g.setColour(juce::Colour(0xff2a3340));
+    g.drawRoundedRectangle(levelZone, 5.0f, 1.3f);
+
+    const float lcx = levelZone.getCentreX();
+    const float midY = levelZone.getCentreY();
+    const float halfAvail = juce::jmax(4.0f, (levelZone.getWidth() * 0.5f) - 14.0f);
+    const float halfH = levelZone.getHeight() * 0.38f;
+    const float mono = lastState.signalPresent
+                           ? juce::jlimit(0.0f, 1.0f, lastState.inputLevel)
+                           : 0.0f;
+    const float span = halfAvail * mono;
+
+    g.setColour(accent().withAlpha(0.85f));
+    if (span > 0.5f)
+    {
+        g.fillRoundedRectangle(juce::Rectangle<float>(lcx - span, midY - halfH, span, halfH * 2.0f).reduced(0.0f, 0.0f),
+                               3.0f);
+        g.fillRoundedRectangle(juce::Rectangle<float>(lcx, midY - halfH, span, halfH * 2.0f).reduced(0.0f, 0.0f),
+                               3.0f);
+    }
+
+    g.setColour(juce::Colours::white.withAlpha(0.55f));
+    g.fillRect(juce::Rectangle<float>(lcx - 1.0f, levelZone.getY() + 3.0f, 2.0f, levelZone.getHeight() - 6.0f));
+
+    const bool clipLit = juce::Time::getApproximateMillisecondCounter() < clipHoldUntilMs;
+
+    if (clipLit)
+    {
+        g.setColour(juce::Colours::red);
+        const float dot = 7.0f;
+        g.fillEllipse(juce::Rectangle<float>(dot, dot).withCentre({levelZone.getX() + 6.0f, midY}));
+        g.fillEllipse(juce::Rectangle<float>(dot, dot).withCentre({levelZone.getRight() - 6.0f, midY}));
+    }
+
+    g.setColour(muted());
+    g.setFont(juce::Font(11.0f));
+    g.drawText("IN", levelZone.withTrimmedTop(levelZone.getHeight() * 0.62f), juce::Justification::centred, false);
 }
 
 void TunerOverlayComponent::resized()
@@ -232,7 +449,7 @@ void TunerOverlayComponent::resized()
     centsLabel.setBounds(r.removeFromTop(40));
     r.removeFromTop(8);
 
-    needleMeterArea = r.removeFromTop(88);
+    needleMeterArea = r.removeFromTop(100);
     r.removeFromTop(10);
 
     statusLabel.setBounds(r.removeFromTop(48));
