@@ -1256,6 +1256,20 @@ void RackViewComponent::syncEncoderFocus()
                          {
                              setSelectedSlot(idx);
                              setVisualFocusedSlot(idx);
+
+                             auto* chain = appContext.pluginHostManager != nullptr
+                                               ? appContext.pluginHostManager->getPluginChain()
+                                               : nullptr;
+                             if (chain == nullptr)
+                                 return;
+
+                             const auto info = chain->getSlotInfo(idx);
+                             const bool loadedPlugin = !info.isEmpty && !info.missingPlugin && !info.isPlaceholder;
+                             if (!loadedPlugin)
+                                 return;
+
+                             if (auto* main = findParentComponentOfClass<MainComponent>())
+                                 main->openFullscreenPluginEditor(idx);
                          },
                          {},
                          true,
