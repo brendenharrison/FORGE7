@@ -81,6 +81,9 @@ void EncoderNavigator::setRootFocusChain(std::vector<EncoderFocusItem> items)
             focusIndex = juce::jlimit(0, static_cast<int>(rootItems.size()) - 1, oldIdx);
     }
 
+    if (!modalActive)
+        triggerOnFocusForCurrentItem();
+
     repaint();
 }
 
@@ -89,6 +92,7 @@ void EncoderNavigator::setModalFocusChain(std::vector<EncoderFocusItem> items)
     modalItems = std::move(items);
     modalActive = !modalItems.empty();
     focusIndex = modalActive ? 0 : juce::jlimit(-1, static_cast<int>(rootItems.size()) - 1, focusIndex);
+    triggerOnFocusForCurrentItem();
     repaint();
 }
 
@@ -105,6 +109,7 @@ void EncoderNavigator::clearModalFocusChain() noexcept
     else
         focusIndex = juce::jlimit(0, static_cast<int>(rootItems.size()) - 1, focusIndex);
 
+    triggerOnFocusForCurrentItem();
     repaint();
 }
 
@@ -199,6 +204,7 @@ void EncoderNavigator::moveFocusBySteps(const int deltaSteps)
     if (focusIndex < 0)
         focusIndex += n;
 
+    triggerOnFocusForCurrentItem();
     repaint();
 }
 
@@ -213,6 +219,19 @@ void EncoderNavigator::activateFocused()
 
     if (item.onActivate != nullptr)
         item.onActivate();
+}
+
+void EncoderNavigator::triggerOnFocusForCurrentItem()
+{
+    auto& chain = activeChain();
+
+    if (focusIndex < 0 || focusIndex >= static_cast<int>(chain.size()))
+        return;
+
+    auto& item = chain[static_cast<size_t>(focusIndex)];
+
+    if (item.onFocus != nullptr)
+        item.onFocus();
 }
 
 void EncoderNavigator::repaintFocusArea()

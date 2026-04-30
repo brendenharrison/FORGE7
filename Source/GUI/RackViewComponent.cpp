@@ -1154,6 +1154,7 @@ void RackViewComponent::syncEncoderFocus()
     appContext.encoderNavigator->clearModalFocusChain();
 
     std::vector<EncoderFocusItem> items;
+    int visibleSlotCount = 0;
 
     for (int i = 0; i < kPluginChainMaxSlots; ++i)
     {
@@ -1163,6 +1164,7 @@ void RackViewComponent::syncEncoderFocus()
         if (!slotCards[static_cast<size_t>(i)]->isVisible())
             continue;
 
+        ++visibleSlotCount;
         const int idx = i;
         items.push_back({ slotCards[static_cast<size_t>(i)].get(),
                          [this, idx]()
@@ -1170,7 +1172,11 @@ void RackViewComponent::syncEncoderFocus()
                              setSelectedSlot(idx);
                          },
                          {},
-                         true });
+                         true,
+                         [this, idx]()
+                         {
+                             setSelectedSlot(idx);
+                         } });
     }
 
     if (addPluginCard != nullptr && addPluginCard->isVisible())
@@ -1199,6 +1205,12 @@ void RackViewComponent::syncEncoderFocus()
     items.push_back({ &globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, {} });
     items.push_back({ &navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, {} });
     items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    items.push_back({ &simHwButton, [this]() { simHwButton.triggerClick(); }, {} });
+#endif
+
+    Logger::info("FORGE7 RackFocus: sync root items=" + juce::String((int)items.size())
+                 + " visibleSlots=" + juce::String(visibleSlotCount));
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
 }

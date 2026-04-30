@@ -65,6 +65,7 @@ private:
 
     const std::vector<EncoderFocusItem>& activeChain() const noexcept;
     std::vector<EncoderFocusItem>& activeChain() noexcept;
+    void triggerOnFocusForCurrentItem();
 
     void moveFocusBySteps(int deltaSteps);
     void activateFocused();
