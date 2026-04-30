@@ -24,6 +24,25 @@
 
 namespace forge7
 {
+
+struct ChainLaneScrollListener final : juce::ScrollBar::Listener
+{
+    explicit ChainLaneScrollListener(juce::Component* laneContent) noexcept
+        : lane(laneContent)
+    {
+    }
+
+    void scrollBarMoved(juce::ScrollBar*, double newRangeStart) override
+    {
+        juce::ignoreUnused(newRangeStart);
+
+        if (lane != nullptr)
+            lane->repaint();
+    }
+
+    juce::Component::SafePointer<juce::Component> lane;
+};
+
 namespace
 {
 
@@ -62,13 +81,27 @@ void RackViewComponent::AddPluginCard::paint(juce::Graphics& g)
     g.setColour(rackAccent().withAlpha(0.45f));
     g.drawRoundedRectangle(bounds, 12.0f, 2.0f);
 
+    constexpr float plusBlockH = 40.0f;
+    constexpr float gap = 6.0f;
+    constexpr float labelBlockH = 22.0f;
+    const float stackH = plusBlockH + gap + labelBlockH;
+
+    auto stack = juce::Rectangle<float>(bounds.getX(),
+                                        bounds.getCentreY() - stackH * 0.5f,
+                                        bounds.getWidth(),
+                                        stackH);
+
+    auto plusArea = stack.removeFromTop(plusBlockH);
+    stack.removeFromTop(gap);
+    auto labelArea = stack;
+
     g.setColour(rackAccent());
     g.setFont(juce::Font(34.0f, juce::Font::bold));
-    g.drawText("+", getLocalBounds().removeFromTop(getHeight() / 2), juce::Justification::centred, false);
+    g.drawText("+", plusArea.toNearestIntEdges(), juce::Justification::centred, false);
 
     g.setColour(rackText());
     g.setFont(juce::Font(14.0f, juce::Font::bold));
-    g.drawText("Add Plugin", getLocalBounds().removeFromBottom(28), juce::Justification::centred, false);
+    g.drawFittedText("Add Plugin", labelArea.toNearestIntEdges(), juce::Justification::centred, 2, 0.85f);
 }
 
 void RackViewComponent::AddPluginCard::mouseDown(const juce::MouseEvent& e)
@@ -276,6 +309,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
             nullptr,
             true);
         rackInputVuMeter->setCaption("IN");
+        rackInputVuMeter->setOpaqueMeterBacking(true);
         addAndMakeVisible(*rackInputVuMeter);
 
         rackOutputVuMeter = std::make_unique<VuMeterComponent>(
@@ -284,6 +318,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
             nullptr,
             true);
         rackOutputVuMeter->setCaption("OUT");
+        rackOutputVuMeter->setOpaqueMeterBacking(true);
         addAndMakeVisible(*rackOutputVuMeter);
 
         for (int i = 0; i < kPluginChainMaxSlots; ++i)
@@ -294,6 +329,7 @@ RackViewComponent::RackViewComponent(AppContext& context)
                 { return phm.getChainMeterTaps().postSlotPeak[static_cast<size_t>(slot)].load(std::memory_order_relaxed); },
                 nullptr,
                 true);
+            rackPostSlotVuMeters[static_cast<size_t>(i)]->setOpaqueMeterBacking(true);
             chainContent->addAndMakeVisible(*rackPostSlotVuMeters[static_cast<size_t>(i)]);
         }
     }
@@ -302,6 +338,9 @@ RackViewComponent::RackViewComponent(AppContext& context)
     chainViewport.setScrollBarsShown(false, true); // no vertical scroll; center lane may scroll horizontally later
     chainViewport.getHorizontalScrollBar().setColour(juce::ScrollBar::thumbColourId, rackAccent().withAlpha(0.55f));
     addAndMakeVisible(chainViewport);
+
+    chainLaneScrollListener = std::make_unique<ChainLaneScrollListener>(chainContent.get());
+    chainViewport.getHorizontalScrollBar().addListener(chainLaneScrollListener.get());
 
     navPerformanceButton.setButtonText("Performance");
 
@@ -473,6 +512,10 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
 RackViewComponent::~RackViewComponent()
 {
+    if (chainLaneScrollListener != nullptr)
+        chainViewport.getHorizontalScrollBar().removeListener(chainLaneScrollListener.get());
+
+    chainLaneScrollListener.reset();
     stopTimer();
 }
 
@@ -596,9 +639,9 @@ void RackViewComponent::resized()
     auto chainArea = area.reduced(padChain, 0);
 
     auto leftIo = chainArea.removeFromLeft(ioW);
-    chainArea.removeFromLeft(10);
+    chainArea.removeFromLeft(14);
     auto rightIo = chainArea.removeFromRight(ioW);
-    chainArea.removeFromRight(10);
+    chainArea.removeFromRight(14);
 
     constexpr int ioMeterStripW = 14;
 
@@ -634,8 +677,13 @@ void RackViewComponent::layoutRackChain()
     constexpr int meterW = 14;
     const int arrowW = 26;
     const int gap = 10;
+    constexpr int topPad = 8;
+    constexpr int scrollbarReserveH = 20;
     const int pad = 8;
-    const int stripH = juce::jmax(150, chainViewport.getHeight() > 0 ? chainViewport.getHeight() - 8 : 150);
+
+    const int viewH = juce::jmax(1, chainViewport.getMaximumVisibleHeight());
+    const int stripH = juce::jmax(130, viewH - topPad - scrollbarReserveH);
+    const int chainContentH = topPad + stripH + scrollbarReserveH;
     const int pluginW = 170;
     const int addW = 160;
 
@@ -679,7 +727,7 @@ void RackViewComponent::layoutRackChain()
             m->setVisible(false);
 
     int x = pad;
-    const int y = pad;
+    const int y = topPad;
 
     // arrow after input (index 0)
     int arrowIdx = 0;
@@ -753,7 +801,7 @@ void RackViewComponent::layoutRackChain()
 
     // Size content; center it in the viewport if it fits.
     const int contentW = x + pad;
-    chainContent->setSize(juce::jmax(contentW, chainViewport.getWidth()), stripH + pad * 2);
+    chainContent->setSize(juce::jmax(contentW, chainViewport.getWidth()), chainContentH);
 
     const int extra = chainViewport.getWidth() - contentW;
     if (extra > 0)

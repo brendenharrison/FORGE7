@@ -24,12 +24,17 @@ public:
     /** Optional tiny label below/beside (ASCII), e.g. "IN", "OUT". */
     void setCaption(const juce::String& s) noexcept { caption = s; }
 
+    /** When true, fills the component bounds with an opaque rack-style backing (avoids bleed-through from adjacent UI). */
+    void setOpaqueMeterBacking(bool shouldUseOpaqueBacking) noexcept;
+
 private:
     void timerCallback() override;
 
     std::function<float()> readLeftFn;
     std::function<float()> readRightFn;
     bool verticalLayout { true };
+
+    bool opaqueMeterBacking { false };
 
     juce::String caption;
 

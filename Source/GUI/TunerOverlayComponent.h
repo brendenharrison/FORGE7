@@ -62,9 +62,14 @@ private:
 
     uint32_t clipHoldUntilMs { 0 };
 
-    bool weakSignalFrame { false };
+    /** Low confidence on last pitch-analysis frame (not every UI tick). */
+    bool weakSignalHold { false };
     /** Valid only after last timer tick; used by paint for needle state. */
     bool needleDrawActive { false };
+
+    /** ~25 Hz pitch updates vs 50 Hz UI; smoothing chases this every frame. */
+    uint32_t analysisTickCounter { 0 };
+    float lastPitchTargetCents { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(TunerOverlayComponent)
 };

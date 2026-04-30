@@ -16,6 +16,7 @@ namespace forge7
 {
 
 struct AppContext;
+struct ChainLaneScrollListener;
 class PluginBrowserComponent;
 class ChainControlsPanelComponent;
 
@@ -112,6 +113,9 @@ private:
 
     juce::Viewport chainViewport; // Center lane only (plugins + add card). IO blocks are fixed outside.
     std::unique_ptr<juce::Component> chainContent;
+
+    /** Repaints chain lane when horizontal scroll moves (avoids stale selection artifacts). */
+    std::unique_ptr<ChainLaneScrollListener> chainLaneScrollListener;
 
     class IoBlock final : public juce::Component
     {

@@ -20,9 +20,9 @@ juce::Colour warn() noexcept { return juce::Colour(0xffffc44d); }
 juce::Colour bad() noexcept { return juce::Colour(0xffff5252); }
 juce::Colour muted() noexcept { return juce::Colour(0xff8a9099); }
 
-constexpr float kSmoothAlpha = 0.38f;
-constexpr float kSmoothCatchUp = 0.52f;
-constexpr float kLargeJumpCents = 22.0f;
+constexpr float kSmoothAlpha = 0.42f;
+constexpr float kSmoothCatchUp = 0.55f;
+constexpr float kLargeJumpCents = 18.0f;
 constexpr float kDecayNoSignal = 0.16f;
 constexpr float kConfidenceFloor = 0.12f;
 constexpr float kClipThreshold = 0.98f;
@@ -34,6 +34,43 @@ static const char* noteLetterFromMidi(int midi) noexcept
     static const char* names[] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
     const int idx = (midi % 12 + 12) % 12;
     return names[idx];
+}
+
+/** Matches TunerPitchAnalyzer inputLevel scaling (RMS * 4, clamped). */
+float monoInputLevelForMeter(const float* samples, int numSamples) noexcept
+{
+    if (samples == nullptr || numSamples <= 0)
+        return 0.0f;
+
+    double acc = 0.0;
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        const double s = static_cast<double>(samples[i]);
+        acc += s * s;
+    }
+
+    const float rms = static_cast<float>(std::sqrt(acc / static_cast<double>(numSamples)));
+    return juce::jlimit(0.0f, 1.0f, rms * 4.0f);
+}
+
+void applyExponentialCentsSmoothing(float& displayedCents,
+                                    float targetCents,
+                                    bool& snapNext) noexcept
+{
+    if (snapNext)
+    {
+        displayedCents = targetCents;
+        snapNext = false;
+        return;
+    }
+
+    float alpha = kSmoothAlpha;
+
+    if (std::abs(targetCents - displayedCents) > kLargeJumpCents)
+        alpha = kSmoothCatchUp;
+
+    displayedCents += (targetCents - displayedCents) * alpha;
 }
 } // namespace
 
@@ -56,9 +93,11 @@ void TunerOverlayComponent::resetSmoothingState() noexcept
     centsWriteIdx = 0;
     centsRingCount = 0;
     centsRing.fill(0.0f);
-    weakSignalFrame = false;
+    weakSignalHold = false;
     clipHoldUntilMs = 0;
     needleDrawActive = false;
+    analysisTickCounter = 0;
+    lastPitchTargetCents = 0.0f;
 }
 
 float TunerOverlayComponent::medianRecentCents() const noexcept
@@ -136,7 +175,7 @@ TunerOverlayComponent::TunerOverlayComponent(AppContext& context, std::function<
 
     analysisScratch.resize(4096, 0.0f);
 
-    startTimerHz(40);
+    startTimerHz(50);
 }
 
 TunerOverlayComponent::~TunerOverlayComponent()
@@ -188,12 +227,12 @@ void TunerOverlayComponent::timerCallback()
     if (rawPeak >= kClipThreshold)
         clipHoldUntilMs = nowMs + kClipHoldMs;
 
-    weakSignalFrame = false;
-
     if (n <= 0)
     {
         lastState = {};
         needleDrawActive = false;
+        weakSignalHold = false;
+        lastPitchTargetCents = 0.0f;
         displayedCents *= (1.0f - kDecayNoSignal);
         noteNameLabel.setText("-", juce::dontSendNotification);
         octaveLabel.setText("", juce::dontSendNotification);
@@ -204,7 +243,83 @@ void TunerOverlayComponent::timerCallback()
         return;
     }
 
-    lastState = TunerPitchAnalyzer::analyze(analysisScratch.data(), n, sr);
+    const float quickLevel = monoInputLevelForMeter(analysisScratch.data(), n);
+    ++analysisTickCounter;
+    const bool doPitchAnalysis = (analysisTickCounter % 2) == 1;
+
+    if (doPitchAnalysis)
+    {
+        lastState = TunerPitchAnalyzer::analyze(analysisScratch.data(), n, sr);
+        lastState.inputLevel = quickLevel;
+
+        if (!lastState.signalPresent)
+        {
+            needleDrawActive = false;
+            weakSignalHold = false;
+            lastPitchTargetCents = 0.0f;
+            displayedCents *= (1.0f - kDecayNoSignal);
+            noteNameLabel.setText("-", juce::dontSendNotification);
+            octaveLabel.setText("", juce::dontSendNotification);
+            centsLabel.setText("", juce::dontSendNotification);
+            statusLabel.setText("No signal", juce::dontSendNotification);
+            statusLabel.setColour(juce::Label::textColourId, bad());
+            juce::String foot = "Chain - + Chain + toggles tuner | Encoder long press closes | Input ";
+            foot += (appContext.audioEngine != nullptr && appContext.audioEngine->getTunerMutesOutput()) ? "Muted" : "Thru";
+            footnoteLabel.setText(foot, juce::dontSendNotification);
+            repaint();
+            return;
+        }
+
+        weakSignalHold = lastState.confidence < kConfidenceFloor;
+
+        const int candidateMidi = midiNoteFromHz(lastState.frequencyHz);
+
+        if (candidateMidi != pendingMidi)
+        {
+            pendingMidi = candidateMidi;
+            pendingFrames = 1;
+        }
+        else
+        {
+            ++pendingFrames;
+        }
+
+        const bool lockedNote = (pendingFrames >= kFramesToLockNote && candidateMidi == pendingMidi);
+
+        if (lockedNote && stableDisplayedMidi != pendingMidi)
+        {
+            stableDisplayedMidi = pendingMidi;
+            centsRingCount = 0;
+            centsWriteIdx = 0;
+            centsRing.fill(0.0f);
+            snapDisplayCentsNext = true;
+        }
+
+        if (lockedNote && stableDisplayedMidi >= 0 && lastState.confidence >= kConfidenceFloor && !weakSignalHold)
+        {
+            centsRing[static_cast<size_t>(centsWriteIdx % 5)] = lastState.centsOffset;
+            ++centsWriteIdx;
+            centsRingCount = juce::jmin(5, centsRingCount + 1);
+        }
+
+        float targetCents = lastState.centsOffset;
+
+        if (weakSignalHold)
+            lastPitchTargetCents = displayedCents;
+        else
+        {
+            if (centsRingCount >= 2)
+                targetCents = medianRecentCents();
+
+            lastPitchTargetCents = targetCents;
+        }
+    }
+    else
+    {
+        lastState.inputLevel = quickLevel;
+    }
+
+    applyExponentialCentsSmoothing(displayedCents, lastPitchTargetCents, snapDisplayCentsNext);
 
     if (!lastState.signalPresent)
     {
@@ -215,64 +330,14 @@ void TunerOverlayComponent::timerCallback()
         centsLabel.setText("", juce::dontSendNotification);
         statusLabel.setText("No signal", juce::dontSendNotification);
         statusLabel.setColour(juce::Label::textColourId, bad());
+        juce::String foot = "Chain - + Chain + toggles tuner | Encoder long press closes | Input ";
+        foot += (appContext.audioEngine != nullptr && appContext.audioEngine->getTunerMutesOutput()) ? "Muted" : "Thru";
+        footnoteLabel.setText(foot, juce::dontSendNotification);
         repaint();
         return;
     }
 
-    if (lastState.confidence < kConfidenceFloor)
-        weakSignalFrame = true;
-
-    const int candidateMidi = midiNoteFromHz(lastState.frequencyHz);
-
-    if (candidateMidi != pendingMidi)
-    {
-        pendingMidi = candidateMidi;
-        pendingFrames = 1;
-    }
-    else
-    {
-        ++pendingFrames;
-    }
-
-    const bool lockedNote = (pendingFrames >= kFramesToLockNote && candidateMidi == pendingMidi);
-
-    if (lockedNote && stableDisplayedMidi != pendingMidi)
-    {
-        stableDisplayedMidi = pendingMidi;
-        centsRingCount = 0;
-        centsWriteIdx = 0;
-        centsRing.fill(0.0f);
-        snapDisplayCentsNext = true;
-    }
-
-    if (lockedNote && stableDisplayedMidi >= 0 && lastState.confidence >= kConfidenceFloor && !weakSignalFrame)
-    {
-        centsRing[static_cast<size_t>(centsWriteIdx % 5)] = lastState.centsOffset;
-        ++centsWriteIdx;
-        centsRingCount = juce::jmin(5, centsRingCount + 1);
-    }
-
-    float targetCents = lastState.centsOffset;
-
-    if (centsRingCount >= 3)
-        targetCents = medianRecentCents();
-
-    if (snapDisplayCentsNext)
-    {
-        displayedCents = targetCents;
-        snapDisplayCentsNext = false;
-    }
-    else
-    {
-        float alpha = kSmoothAlpha;
-
-        if (std::abs(targetCents - displayedCents) > kLargeJumpCents)
-            alpha = kSmoothCatchUp;
-
-        displayedCents += (targetCents - displayedCents) * alpha;
-    }
-
-    if (weakSignalFrame)
+    if (weakSignalHold)
     {
         noteNameLabel.setColour(juce::Label::textColourId, muted());
         octaveLabel.setColour(juce::Label::textColourId, muted());
@@ -280,53 +345,61 @@ void TunerOverlayComponent::timerCallback()
         statusLabel.setText("Listening...", juce::dontSendNotification);
         statusLabel.setColour(juce::Label::textColourId, muted());
     }
-    else if (stableDisplayedMidi >= 0 && lockedNote)
+    else
     {
-        noteNameLabel.setColour(juce::Label::textColourId, text());
-        octaveLabel.setColour(juce::Label::textColourId, text());
-        centsLabel.setColour(juce::Label::textColourId, text());
+        const int hzMidi = midiNoteFromHz(lastState.frequencyHz);
+        const bool lockedNote = (pendingFrames >= kFramesToLockNote) && (hzMidi == pendingMidi);
 
-        noteNameLabel.setText(noteLetterFromMidi(stableDisplayedMidi), juce::dontSendNotification);
-        octaveLabel.setText(juce::String((stableDisplayedMidi / 12) - 1), juce::dontSendNotification);
-
-        const int centsRounded = static_cast<int>(std::lround(static_cast<double>(displayedCents)));
-        centsLabel.setText(juce::String(centsRounded) + " cents", juce::dontSendNotification);
-
-        const float ac = std::abs(displayedCents);
-        juce::String status;
-
-        if (ac <= 3.0f)
+        if (stableDisplayedMidi >= 0 && lockedNote)
         {
-            status = "In tune";
-            statusLabel.setColour(juce::Label::textColourId, good());
-        }
-        else if (ac <= 10.0f)
-        {
-            status = displayedCents < 0.0f ? "Flat (close)" : "Sharp (close)";
-            statusLabel.setColour(juce::Label::textColourId, warn());
+            noteNameLabel.setColour(juce::Label::textColourId, text());
+            octaveLabel.setColour(juce::Label::textColourId, text());
+            centsLabel.setColour(juce::Label::textColourId, text());
+
+            noteNameLabel.setText(noteLetterFromMidi(stableDisplayedMidi), juce::dontSendNotification);
+            octaveLabel.setText(juce::String((stableDisplayedMidi / 12) - 1), juce::dontSendNotification);
+
+            const int centsRounded = static_cast<int>(std::lround(static_cast<double>(displayedCents)));
+            centsLabel.setText(juce::String(centsRounded) + " cents", juce::dontSendNotification);
+
+            const float ac = std::abs(displayedCents);
+            juce::String status;
+
+            if (ac <= 3.0f)
+            {
+                status = "In tune";
+                statusLabel.setColour(juce::Label::textColourId, good());
+            }
+            else if (ac <= 10.0f)
+            {
+                status = displayedCents < 0.0f ? "Flat (close)" : "Sharp (close)";
+                statusLabel.setColour(juce::Label::textColourId, warn());
+            }
+            else
+            {
+                status = displayedCents < 0.0f ? "Flat" : "Sharp";
+                statusLabel.setColour(juce::Label::textColourId, bad());
+            }
+
+            statusLabel.setText(status, juce::dontSendNotification);
         }
         else
         {
-            status = displayedCents < 0.0f ? "Flat" : "Sharp";
-            statusLabel.setColour(juce::Label::textColourId, bad());
+            noteNameLabel.setText("-", juce::dontSendNotification);
+            octaveLabel.setText("", juce::dontSendNotification);
+            centsLabel.setText("", juce::dontSendNotification);
+            statusLabel.setText("Listening...", juce::dontSendNotification);
+            statusLabel.setColour(juce::Label::textColourId, muted());
         }
-
-        statusLabel.setText(status, juce::dontSendNotification);
-    }
-    else
-    {
-        noteNameLabel.setText("-", juce::dontSendNotification);
-        octaveLabel.setText("", juce::dontSendNotification);
-        centsLabel.setText("", juce::dontSendNotification);
-        statusLabel.setText("Listening...", juce::dontSendNotification);
-        statusLabel.setColour(juce::Label::textColourId, muted());
     }
 
     juce::String foot = "Chain - + Chain + toggles tuner | Encoder long press closes | Input ";
     foot += (appContext.audioEngine != nullptr && appContext.audioEngine->getTunerMutesOutput()) ? "Muted" : "Thru";
     footnoteLabel.setText(foot, juce::dontSendNotification);
 
-    needleDrawActive = lastState.signalPresent && !weakSignalFrame && stableDisplayedMidi >= 0 && lockedNote;
+    const int hzMidiForNeedle = midiNoteFromHz(lastState.frequencyHz);
+    const bool lockedNoteForNeedle = (pendingFrames >= kFramesToLockNote) && (hzMidiForNeedle == pendingMidi);
+    needleDrawActive = lastState.signalPresent && !weakSignalHold && stableDisplayedMidi >= 0 && lockedNoteForNeedle;
 
     repaint();
 }

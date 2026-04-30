@@ -32,6 +32,7 @@ const std::array<juce::Colour, 5> kThumbAccentPalette {
 RackSlotCard::RackSlotCard()
 {
     setInterceptsMouseClicks(true, true);
+    setPaintingIsUnclipped(false);
     setSize(kMinCardWidth, kMinCardHeight);
 
     titleLabel.setJustificationType(juce::Justification::centred);
@@ -142,22 +143,27 @@ void RackSlotCard::syncLabelsFromInfo()
 
 void RackSlotCard::paint(juce::Graphics& g)
 {
-    auto bounds = getLocalBounds().toFloat().reduced(2.0f);
+    juce::Graphics::ScopedSaveState ss(g);
+    g.reduceClipRegion(getLocalBounds());
+
+    /* Inset so stroke + anti-alias stay inside the component (avoids scroll smear / bleed). */
+    const float inset = 2.5f;
+    auto bounds = getLocalBounds().toFloat().reduced(inset);
 
     const auto fill = lastInfo.missingPlugin ? juce::Colour(0xff3a2020) : rackPanel();
     g.setColour(fill);
     g.fillRoundedRectangle(bounds, 8.0f);
-
-    const float thickness = selected ? 3.0f : 1.0f;
-    const auto borderCol = selected ? rackAccent() : rackBorder();
-    g.setColour(borderCol);
-    g.drawRoundedRectangle(bounds, 8.0f, thickness);
 
     if (selected)
     {
         g.setColour(rackAccent().withAlpha(0.12f));
         g.fillRoundedRectangle(bounds, 8.0f);
     }
+
+    const float thickness = selected ? 2.5f : 1.0f;
+    const auto borderCol = selected ? rackAccent() : rackBorder();
+    g.setColour(borderCol);
+    g.drawRoundedRectangle(bounds, 8.0f, thickness);
 
     if (! thumbnailBounds.isEmpty() && ! lastInfo.isEmpty)
         drawPluginThumbnail(g, thumbnailBounds);

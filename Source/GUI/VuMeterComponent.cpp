@@ -43,6 +43,13 @@ VuMeterComponent::VuMeterComponent(std::function<float()> readLeft,
     startTimerHz(40);
 }
 
+void VuMeterComponent::setOpaqueMeterBacking(const bool shouldUseOpaqueBacking) noexcept
+{
+    opaqueMeterBacking = shouldUseOpaqueBacking;
+    setOpaque(shouldUseOpaqueBacking);
+    repaint();
+}
+
 VuMeterComponent::~VuMeterComponent()
 {
     stopTimer();
@@ -74,6 +81,9 @@ void VuMeterComponent::timerCallback()
 
 void VuMeterComponent::paint(juce::Graphics& g)
 {
+    if (opaqueMeterBacking)
+        g.fillAll(juce::Colour(0xff12151a));
+
     auto full = getLocalBounds().toFloat();
     const float captionH = caption.isNotEmpty() ? 11.0f : 0.0f;
     juce::Rectangle<float> captionArea;
