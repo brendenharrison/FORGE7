@@ -399,6 +399,7 @@ void MainComponent::closeSettings()
 
 void MainComponent::setEditMode(const bool shouldShowRackEditor)
 {
+    const bool wasEditMode = editMode;
     editMode = shouldShowRackEditor;
 
     if (!editMode && rackView != nullptr)
@@ -421,6 +422,9 @@ void MainComponent::setEditMode(const bool shouldShowRackEditor)
         encoderNavigator.toFront(false);
 
     restoreBaseFocus();
+
+    if (wasEditMode && !editMode && !isModalOverlayOpen() && performanceView != nullptr)
+        performanceView->syncEncoderFocus(true);
 }
 
 void MainComponent::openFullscreenPluginEditor(const int slotIndex)

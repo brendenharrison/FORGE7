@@ -28,7 +28,7 @@ public:
     void resized() override;
 
     /** Rebuild hardware encoder focus ring targets. */
-    void syncEncoderFocus();
+    void syncEncoderFocus(bool resetToFirst = false);
 
     /** Full HUD refresh (project/scene/chain + knobs); safe from `MainComponent`. */
     void refreshHud();
