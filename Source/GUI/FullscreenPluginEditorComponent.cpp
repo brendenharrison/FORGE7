@@ -93,6 +93,13 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     assignModeToggle.setColour(juce::ToggleButton::tickColourId, accent());
     assignModeToggle.onClick = [this]()
     {
+        // Assignment requires plugin controls to receive touch/click; Pan Mode would swallow drags.
+        if (assignModeToggle.getToggleState())
+        {
+            panModeToggle.setToggleState(false, juce::dontSendNotification);
+            pluginEditorCanvas.setPanMode(false);
+        }
+
         parameterList.setVisible(assignModeToggle.getToggleState());
         assignHintLabel.setVisible(assignModeToggle.getToggleState());
         resized();
@@ -139,7 +146,9 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     viewFitHeight.setColour(juce::TextButton::textColourOffId, text());
     viewFitHeight.onClick = [this]()
     {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitHeight);
+        // Legacy button kept for now; Fit H maps to Fit Width/Height-style resizing, but V1 focuses on Fit/Actual/Width.
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
+        refreshPanControlsFromCanvas();
     };
     addAndMakeVisible(viewFitHeight);
 
@@ -147,7 +156,8 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     viewFitWidth.setColour(juce::TextButton::textColourOffId, text());
     viewFitWidth.onClick = [this]()
     {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitWidth);
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitWidth);
+        refreshPanControlsFromCanvas();
     };
     addAndMakeVisible(viewFitWidth);
 
@@ -155,7 +165,8 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     viewFitAll.setColour(juce::TextButton::textColourOffId, text());
     viewFitAll.onClick = [this]()
     {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::FitAll);
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
+        refreshPanControlsFromCanvas();
     };
     addAndMakeVisible(viewFitAll);
 
@@ -163,9 +174,67 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     viewActual100.setColour(juce::TextButton::textColourOffId, text());
     viewActual100.onClick = [this]()
     {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::ViewMode::Actual100);
+        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::ActualSize);
+        refreshPanControlsFromCanvas();
     };
     addAndMakeVisible(viewActual100);
+
+    panModeToggle.setColour(juce::ToggleButton::textColourId, text());
+    panModeToggle.setColour(juce::ToggleButton::tickColourId, accent());
+    panModeToggle.onClick = [this]()
+    {
+        // If Pan Mode is enabled, we disable Assign so drags are unambiguous.
+        if (panModeToggle.getToggleState() && assignModeToggle.getToggleState())
+        {
+            assignModeToggle.setToggleState(false, juce::dontSendNotification);
+            parameterList.setVisible(false);
+            assignHintLabel.setVisible(false);
+
+            if (appContext.parameterMappingManager != nullptr)
+                appContext.parameterMappingManager->cancelKnobAssignmentLearn();
+        }
+
+        pluginEditorCanvas.setPanMode(panModeToggle.getToggleState());
+        syncEncoderFocus();
+    };
+    addAndMakeVisible(panModeToggle);
+
+    auto stylePanLabel = [](juce::Label& l)
+    {
+        l.setFont(juce::Font(11.0f));
+        l.setColour(juce::Label::textColourId, muted());
+        l.setJustificationType(juce::Justification::centredLeft);
+    };
+
+    stylePanLabel(panXLabel);
+    panXLabel.setText("X Pan", juce::dontSendNotification);
+    addAndMakeVisible(panXLabel);
+
+    stylePanLabel(panYLabel);
+    panYLabel.setText("Y Pan", juce::dontSendNotification);
+    addAndMakeVisible(panYLabel);
+
+    auto stylePanSlider = [](juce::Slider& s)
+    {
+        s.setSliderStyle(juce::Slider::LinearHorizontal);
+        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+        s.setRange(0.0, 1.0, 0.0);
+        s.setEnabled(false);
+    };
+
+    stylePanSlider(panXSlider);
+    panXSlider.onValueChange = [this]()
+    {
+        pluginEditorCanvas.setPanPosition(static_cast<float>(panXSlider.getValue()), pluginEditorCanvas.getPanY());
+    };
+    addAndMakeVisible(panXSlider);
+
+    stylePanSlider(panYSlider);
+    panYSlider.onValueChange = [this]()
+    {
+        pluginEditorCanvas.setPanPosition(pluginEditorCanvas.getPanX(), static_cast<float>(panYSlider.getValue()));
+    };
+    addAndMakeVisible(panYSlider);
 
     juce::AudioPluginInstance* instance = nullptr;
 
@@ -185,6 +254,8 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
     if (embeddedEditor != nullptr)
         pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
+
+    refreshPanControlsFromCanvas();
 
     rebuildParameterListModel();
 
@@ -212,6 +283,7 @@ void FullscreenPluginEditorComponent::paint(juce::Graphics& g)
 void FullscreenPluginEditorComponent::timerCallback()
 {
     refreshMappingStrip();
+    refreshPanControlsFromCanvas();
 
     if (appContext.sceneManager != nullptr)
     {
@@ -273,16 +345,34 @@ void FullscreenPluginEditorComponent::resized()
     {
         auto viewRow = area.removeFromTop(34);
         const int gap = 6;
-        const int nBtns = 4;
+        const int nBtns = 5;
         const int btnW = juce::jmax(56, (viewRow.getWidth() - gap * (nBtns - 1)) / nBtns);
 
-        viewFitHeight.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
-        viewFitWidth.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
         viewFitAll.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
         viewRow.removeFromLeft(gap);
         viewActual100.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        viewFitWidth.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        panModeToggle.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+        viewRow.removeFromLeft(gap);
+        viewFitHeight.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
+    }
+
+    area.removeFromTop(6);
+
+    // Pan sliders: only meaningful when plugin is larger than viewport; canvas will enable/disable.
+    {
+        auto panRow = area.removeFromTop(44);
+        auto topLine = panRow.removeFromTop(18);
+        const int labelW = 52;
+        panXLabel.setBounds(topLine.removeFromLeft(labelW));
+        panXSlider.setBounds(topLine);
+
+        panRow.removeFromTop(4);
+        auto bottomLine = panRow.removeFromTop(18);
+        panYLabel.setBounds(bottomLine.removeFromLeft(labelW));
+        panYSlider.setBounds(bottomLine);
     }
 
     area.removeFromTop(6);
@@ -308,6 +398,27 @@ void FullscreenPluginEditorComponent::resized()
     }
 
     pluginEditorCanvas.setBounds(area);
+    refreshPanControlsFromCanvas();
+}
+
+void FullscreenPluginEditorComponent::refreshPanControlsFromCanvas()
+{
+    float minX = 0.0f, maxX = 0.0f;
+    float minY = 0.0f, maxY = 0.0f;
+    pluginEditorCanvas.getPanRangeX(minX, maxX);
+    pluginEditorCanvas.getPanRangeY(minY, maxY);
+
+    const bool panXEnabled = std::abs(maxX - minX) > 0.5f;
+    const bool panYEnabled = std::abs(maxY - minY) > 0.5f;
+
+    panXSlider.setEnabled(panXEnabled);
+    panYSlider.setEnabled(panYEnabled);
+
+    panXSlider.setRange(minX, maxX, 0.0);
+    panYSlider.setRange(minY, maxY, 0.0);
+
+    panXSlider.setValue(pluginEditorCanvas.getPanX(), juce::dontSendNotification);
+    panYSlider.setValue(pluginEditorCanvas.getPanY(), juce::dontSendNotification);
 }
 
 void FullscreenPluginEditorComponent::rebuildParameterListModel()
@@ -447,10 +558,28 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
     items.push_back({ &backButton, [this]() { backButton.triggerClick(); }, {} });
     items.push_back({ &assignModeToggle, [this]() { assignModeToggle.triggerClick(); }, {} });
 
-    items.push_back({ &viewFitHeight, [this]() { viewFitHeight.triggerClick(); }, {} });
-    items.push_back({ &viewFitWidth, [this]() { viewFitWidth.triggerClick(); }, {} });
     items.push_back({ &viewFitAll, [this]() { viewFitAll.triggerClick(); }, {} });
     items.push_back({ &viewActual100, [this]() { viewActual100.triggerClick(); }, {} });
+    items.push_back({ &viewFitWidth, [this]() { viewFitWidth.triggerClick(); }, {} });
+    items.push_back({ &panModeToggle, [this]() { panModeToggle.triggerClick(); }, {} });
+
+    items.push_back({ &panXSlider,
+                      []() {},
+                      [this](const int d)
+                      {
+                          const double step = 40.0 * (d > 0 ? 1.0 : -1.0);
+                          panXSlider.setValue(panXSlider.getValue() + step, juce::sendNotificationSync);
+                      } });
+
+    items.push_back({ &panYSlider,
+                      []() {},
+                      [this](const int d)
+                      {
+                          const double step = 40.0 * (d > 0 ? 1.0 : -1.0);
+                          panYSlider.setValue(panYSlider.getValue() + step, juce::sendNotificationSync);
+                      } });
+
+    items.push_back({ &viewFitHeight, [this]() { viewFitHeight.triggerClick(); }, {} });
 
     /** Encoder rotate pans the plugin canvas when zoomed; encoder press toggles horizontal vs vertical pan axis. */
     items.push_back({ &pluginEditorCanvas,
@@ -461,6 +590,7 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
                       [this](const int d)
                       {
                           pluginEditorCanvas.panWithEncoderDetents(d);
+                          refreshPanControlsFromCanvas();
                       } });
 
     if (assignModeToggle.getToggleState())

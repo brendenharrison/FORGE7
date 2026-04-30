@@ -49,6 +49,7 @@ public:
 
 private:
     void timerCallback() override;
+    void refreshPanControlsFromCanvas();
 
     int getNumRows() override;
     void paintListBoxItem(int rowNumber,
@@ -77,9 +78,15 @@ private:
     std::unique_ptr<CpuMeter> cpuMeter;
 
     juce::TextButton viewFitHeight { "Fit H" };
-    juce::TextButton viewFitWidth { "Fit W" };
-    juce::TextButton viewFitAll { "Fit All" };
-    juce::TextButton viewActual100 { "100%" };
+    juce::TextButton viewFitWidth { "Width" };
+    juce::TextButton viewFitAll { "Fit" };
+    juce::TextButton viewActual100 { "Actual" };
+    juce::ToggleButton panModeToggle { "Pan" };
+
+    juce::Slider panXSlider;
+    juce::Slider panYSlider;
+    juce::Label panXLabel;
+    juce::Label panYLabel;
 
     /** Owned first so destruction clears canvas -> releases hosted editor before unique_ptr resets. */
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;

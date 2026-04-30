@@ -118,6 +118,7 @@ Major surfaces (message thread):
 - `PerformanceViewComponent`: live-oriented view + chain/scene switching
 - `RackViewComponent`: chain editing surface + plugin browser overlay
 - `FullscreenPluginEditorComponent`: embedded plugin editor view
+- `PluginEditorCanvas`: clipped plugin editor viewport with view modes + panning (safe for fixed-size editors)
 - `SettingsComponent`: audio and scanning configuration
 - `ProjectSceneBrowserComponent`: Jump Browser overlay (Project/Scene/Chain navigation)
 - `SimulatedControlsComponent`: development-only simulated hardware panel

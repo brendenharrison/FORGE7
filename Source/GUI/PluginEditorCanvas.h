@@ -15,22 +15,35 @@ namespace forge7
 namespace detail
 {
 class ClipPanMouseForwarder;
+class PanInterceptLayer;
 }
 
 /** Hosts a native `AudioProcessorEditor` inside a clipped region above FORGE chrome.
 
-    VST3 editors on macOS embed **native views** (NSView) that often **ignore** `Component` affine
-    transforms. Scaling is applied by **resizing** the editor to scaled pixel dimensions and moving it
-    inside `panBoard`, clipped by `pluginContentClip`. */
+    IMPORTANT DESIGN NOTE (embedded/pedal UX):
+
+    VST plugin editors may or may not support resizing/scaling.
+    - Some editors are fixed-size.
+    - Some expose host-resizable bounds (`AudioProcessorEditor::isResizable()` + constrainer).
+    - Some have internal scaling controls (inside the plugin UI).
+
+    Therefore FORGE7 cannot depend on true plugin scaling.
+
+    Strategy:
+    1) Create the editor at its preferred/natural size (source of truth).
+    2) Attempt host resize only when supported/safe (resizable editors).
+    3) Wrap the editor in a clipped viewport/pan surface.
+    4) Provide view modes + pan controls for 7-inch touchscreen usability.
+
+    This component implements (2)-(4) while keeping the editor embedded (no OS window). */
 class PluginEditorCanvas final : public juce::Component
 {
 public:
-    enum class ViewMode
+    enum class PluginEditorViewMode
     {
-        FitHeight,
+        ActualSize,
+        FitToScreen,
         FitWidth,
-        FitAll,
-        Actual100,
     };
 
     PluginEditorCanvas();
@@ -42,10 +55,14 @@ public:
     /** Removes hosted editor from component hierarchy without deleting it. */
     void clearHostedEditor() noexcept;
 
-    void setViewMode(ViewMode mode);
-    ViewMode getViewMode() const noexcept { return viewMode; }
+    void setViewMode(PluginEditorViewMode mode);
+    PluginEditorViewMode getViewMode() const noexcept { return viewMode; }
 
     void panBy(float deltaX, float deltaY);
+    void setPanPosition(float x, float y);
+
+    float getPanX() const noexcept { return panX; }
+    float getPanY() const noexcept { return panY; }
 
     void toggleEncoderPanAxis() noexcept;
 
@@ -55,6 +72,20 @@ public:
 
     bool canPanHorizontally() const noexcept;
     bool canPanVertically() const noexcept;
+
+    void setPanMode(bool enabled);
+    bool getPanMode() const noexcept { return panMode; }
+
+    /** For embedding UI: min/max pan range in pixels (max is typically 0). */
+    void getPanRangeX(float& minXOut, float& maxXOut) const noexcept;
+    void getPanRangeY(float& minYOut, float& maxYOut) const noexcept;
+
+    int getNaturalEditorWidth() const noexcept { return naturalW; }
+    int getNaturalEditorHeight() const noexcept { return naturalH; }
+    int getCurrentEditorWidth() const noexcept { return currentW; }
+    int getCurrentEditorHeight() const noexcept { return currentH; }
+
+    juce::Rectangle<int> getViewportBoundsForContent() const noexcept;
 
     void applyLayout();
 
@@ -73,13 +104,15 @@ public:
     void forwardClipMouseUp(const juce::MouseEvent& e);
 
 private:
-    void captureNativeSizeFromEditor();
-    void recomputeScaleAndPan();
+    void captureNaturalSizeFromEditor();
+    void applyViewModeToEditorSize();
     void clampPan();
     void layoutPanBoardAndEditor();
+    void updatePanInterceptLayer();
 
-    int scaledEditorWidth() const noexcept;
-    int scaledEditorHeight() const noexcept;
+    int viewportWidth() const noexcept;
+    int viewportHeight() const noexcept;
+    bool hostedEditorIsResizable() const noexcept;
 
     juce::AudioProcessorEditor* hostedEditor = nullptr;
 
@@ -87,17 +120,22 @@ private:
     juce::Component panBoard;
 
     std::unique_ptr<detail::ClipPanMouseForwarder> clipForwarder;
+    std::unique_ptr<detail::PanInterceptLayer> panIntercept;
 
-    int nativeW { 800 };
-    int nativeH { 500 };
+    int naturalW { 800 };
+    int naturalH { 500 };
 
-    ViewMode viewMode { ViewMode::FitHeight };
+    int currentW { 800 };
+    int currentH { 500 };
 
-    float scale { 1.0f };
+    PluginEditorViewMode viewMode { PluginEditorViewMode::FitToScreen };
+
     float panX { 0.0f };
     float panY { 0.0f };
 
     bool encoderPanVertical { false };
+
+    bool panMode { false };
 
     bool draggingPan { false };
     juce::Point<float> lastDragPos {};
