@@ -17,6 +17,8 @@ class FullscreenPluginEditorComponent;
 class SimulatedControlsComponent;
 class SettingsComponent;
 class ProjectSceneBrowserComponent;
+class ChainChordDetector;
+class TunerOverlayComponent;
 
 /** Root GUI shell for the standalone app. Switches between Performance Mode (hands-free,
     touch-friendly) and Edit Mode (rack builder). Owns EncoderNavigator for the large
@@ -58,6 +60,15 @@ public:
 
     bool isProjectSceneJumpBrowserOpen() const noexcept;
 
+    /** Chain - / + from Performance / Rack / tests: same chord window as hardware. */
+    void handleChainPreviousFromUi();
+    void handleChainNextFromUi();
+
+    void toggleTunerOverlay();
+    void showTunerOverlay();
+    void hideTunerOverlay();
+    bool isTunerOverlayVisible() const noexcept;
+
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     /** In-app fallback for simulated hardware (always visible inside the main window). */
     void toggleSimulatedControlsPanel();
@@ -79,6 +90,9 @@ private:
     bool settingsReturnToEditMode = false;
 
     std::unique_ptr<ProjectSceneBrowserComponent> projectSceneJumpBrowser;
+
+    std::unique_ptr<ChainChordDetector> chainChordDetector;
+    std::unique_ptr<TunerOverlayComponent> tunerOverlay;
 
     bool handleGlobalEncoderLongPress();
     void showProjectSceneJumpBrowser();

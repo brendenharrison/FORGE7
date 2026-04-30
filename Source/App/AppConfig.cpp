@@ -56,6 +56,8 @@ void AppConfig::seedDefaults()
     /** Dev-only: default off - normal Sim HW sends relative deltas for assignable knobs. */
     o->setProperty("simDevAbsoluteKnobTest", false);
 
+    o->setProperty("tunerMutesOutput", true);
+
     settings = juce::var(o);
 }
 
@@ -156,6 +158,27 @@ void AppConfig::setLastLoadedProjectPath(const juce::String& absolutePath)
 {
     if (auto* o = settings.getDynamicObject())
         o->setProperty("lastLoadedProjectPath", absolutePath);
+}
+
+bool AppConfig::getTunerMutesOutput() const noexcept
+{
+    if (auto* o = settings.getDynamicObject())
+    {
+        const juce::var v = o->getProperty("tunerMutesOutput");
+
+        if (v.isVoid() || v.isUndefined())
+            return true;
+
+        return static_cast<bool>(v);
+    }
+
+    return true;
+}
+
+void AppConfig::setTunerMutesOutput(const bool shouldMute) noexcept
+{
+    if (auto* o = settings.getDynamicObject())
+        o->setProperty("tunerMutesOutput", shouldMute);
 }
 
 } // namespace forge7

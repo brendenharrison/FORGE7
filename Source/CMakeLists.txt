@@ -8,6 +8,7 @@ set(FORGE7_SOURCES
 
     Audio/AudioEngine.cpp
     Audio/CrossfadeMixer.cpp
+    Audio/TunerPitchAnalyzer.cpp
 
     PluginHost/PluginHostManager.cpp
     PluginHost/PluginScanSkipStore.cpp
@@ -30,6 +31,7 @@ set(FORGE7_SOURCES
     Controls/MidiControlInput.cpp
     Controls/UsbSerialHardwareBridge.cpp
     Controls/EncoderNavigator.cpp
+    Controls/ChainChordDetector.cpp
     Controls/ParameterMappingDescriptor.cpp
     Controls/ParameterMappingManager.cpp
 
@@ -44,6 +46,7 @@ set(FORGE7_SOURCES
     GUI/PluginEditorCanvas.cpp
     GUI/RackSlotCard.cpp
     GUI/PerformanceViewComponent.cpp
+    GUI/TunerOverlayComponent.cpp
     GUI/PluginBrowserComponent.cpp
     GUI/PluginInspectorComponent.cpp
     GUI/ChainControlsPanelComponent.cpp

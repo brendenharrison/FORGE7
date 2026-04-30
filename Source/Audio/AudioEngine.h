@@ -2,9 +2,11 @@
 
 #include <array>
 #include <atomic>
+#include <cstdint>
 #include <vector>
 
 #include <juce_audio_devices/juce_audio_devices.h>
+
 
 namespace forge7
 {
@@ -102,6 +104,17 @@ public:
     /** JUCE-reported approximate CPU load of the audio callback [0, 1]. Safe to read from GUI/timer only. */
     double getApproximateCpuUsage() const noexcept { return deviceManager.getCpuUsage(); }
 
+    /** Message thread: tuner captures mono input after input gain, before plugin chain (same path as pre-chain meter). */
+    void setTunerCaptureActive(bool active) noexcept;
+    bool isTunerCaptureActive() const noexcept { return tunerCaptureActive.load(std::memory_order_relaxed) != 0; }
+
+    /** Message thread: when tuner is open and this is true, main outputs are silenced at the final copy stage. */
+    void setTunerMutesOutput(bool shouldMute) noexcept;
+    bool getTunerMutesOutput() const noexcept { return tunerMutesOutput.load(std::memory_order_relaxed) != 0; }
+
+    /** Message thread: linearize up to `dstCapacity` recent samples from the tuner ring; returns count written. */
+    int copyTunerMonoSnapshot(float* dst, int dstCapacity) const noexcept;
+
     /** Diagnostic atomics published from the audio callback - read safely from message thread (relaxed). */
     int getLastSelectedInputChannel() const noexcept { return lastSelectedInputChannel.load(std::memory_order_relaxed); }
     /** Number of non-null input buffers averaged into mono last callback (0 if none). */
@@ -154,6 +167,13 @@ private:
     std::atomic<uint32_t> inputPresentFlag { 0 };
 
     static float clampGain(float g) noexcept;
+
+    void appendTunerPreFxMonoToRing(const float* mono, int numSamples) noexcept;
+
+    std::vector<float> tunerPreFxRing;
+    std::atomic<uint64_t> tunerRingWrite { 0 };
+    std::atomic<uint32_t> tunerCaptureActive { 0 };
+    std::atomic<uint32_t> tunerMutesOutput { 1 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AudioEngine)
 };

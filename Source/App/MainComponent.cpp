@@ -1,7 +1,12 @@
 #include "MainComponent.h"
 
 #include "AppContext.h"
+#include "AppConfig.h"
+#include "ProjectSession.h"
 
+#include "../Audio/AudioEngine.h"
+#include "../Controls/ChainChordDetector.h"
+#include "../Controls/HardwareControlTypes.h"
 #include "../Controls/KeyboardHardwareSimulator.h"
 #include "../GUI/FullscreenPluginEditorComponent.h"
 #include "../GUI/PerformanceViewComponent.h"
@@ -9,6 +14,7 @@
 #include "../GUI/ProjectSceneBrowserComponent.h"
 #include "../GUI/SettingsComponent.h"
 #include "../GUI/SimulatedControlsComponent.h"
+#include "../GUI/TunerOverlayComponent.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../Utilities/Logger.h"
@@ -61,8 +67,50 @@ MainComponent::MainComponent(AppContext& context)
     performanceView = std::make_unique<PerformanceViewComponent>(appContext);
     rackView = std::make_unique<RackViewComponent>(appContext);
 
+    chainChordDetector = std::make_unique<ChainChordDetector>(
+        [this]() { toggleTunerOverlay(); },
+        [this]()
+        {
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->previousChain();
+
+            refreshProjectDependentViews();
+        },
+        [this]()
+        {
+            if (appContext.projectSession != nullptr)
+                appContext.projectSession->nextChain();
+
+            refreshProjectDependentViews();
+        });
+
     if (appContext.controlManager != nullptr)
     {
+        appContext.controlManager->setChainChordConsumer(
+            [this](const HardwareControlEvent& e) -> bool
+            {
+                if (e.type != HardwareControlType::ButtonPressed)
+                    return false;
+
+                if (e.id == HardwareControlId::ChainPreviousButton)
+                {
+                    if (chainChordDetector != nullptr)
+                        chainChordDetector->chainPreviousClicked();
+
+                    return true;
+                }
+
+                if (e.id == HardwareControlId::ChainNextButton)
+                {
+                    if (chainChordDetector != nullptr)
+                        chainChordDetector->chainNextClicked();
+
+                    return true;
+                }
+
+                return false;
+            });
+
         keyboardHardwareSimulator = std::make_unique<KeyboardHardwareSimulator>(*appContext.controlManager);
         keyboardHardwareSimulator->attachTo(*this);
     }
@@ -112,6 +160,11 @@ MainComponent::MainComponent(AppContext& context)
 
 MainComponent::~MainComponent()
 {
+    hideTunerOverlay();
+
+    if (appContext.controlManager != nullptr)
+        appContext.controlManager->setChainChordConsumer({});
+
     closeFullscreenPluginEditor();
     closeProjectSceneJumpBrowser();
     appContext.tryConsumeEncoderLongPress = {};
@@ -164,6 +217,15 @@ void MainComponent::resized()
         return;
     }
 
+    if (tunerOverlay != nullptr && tunerOverlay->isVisible())
+    {
+        tunerOverlay->setBounds(bounds);
+        tunerOverlay->toFront(false);
+        encoderNavigator.setBounds(bounds);
+        encoderNavigator.toFront(false);
+        return;
+    }
+
     if (performanceView != nullptr)
         performanceView->setBounds(bounds);
     if (rackView != nullptr)
@@ -196,7 +258,7 @@ void MainComponent::resized()
         if (simulatedControlsPanel != nullptr && simulatedControlsViewport != nullptr)
         {
             const int contentW = juce::jmax(280, simulatedControlsViewport->getWidth() - 18);
-            const int contentH = juce::jmax(860, simulatedControlsViewport->getHeight());
+            const int contentH = juce::jmax(920, simulatedControlsViewport->getHeight());
             simulatedControlsPanel->setSize(contentW, contentH);
         }
     }
@@ -395,6 +457,12 @@ bool MainComponent::handleGlobalEncoderLongPress()
 {
     Logger::info("FORGE7 MainComponent: tryConsumeEncoderLongPress called");
 
+    if (isTunerOverlayVisible())
+    {
+        hideTunerOverlay();
+        return true;
+    }
+
     if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
     {
         Logger::info("FORGE7 JumpBrowser: close from encoder long press");
@@ -482,10 +550,83 @@ void MainComponent::closeProjectSceneJumpBrowser()
     resized();
 }
 
+void MainComponent::handleChainPreviousFromUi()
+{
+    if (chainChordDetector != nullptr)
+        chainChordDetector->chainPreviousClicked();
+}
+
+void MainComponent::handleChainNextFromUi()
+{
+    if (chainChordDetector != nullptr)
+        chainChordDetector->chainNextClicked();
+}
+
+bool MainComponent::isTunerOverlayVisible() const noexcept
+{
+    return tunerOverlay != nullptr && tunerOverlay->isVisible();
+}
+
+void MainComponent::toggleTunerOverlay()
+{
+    if (isTunerOverlayVisible())
+        hideTunerOverlay();
+    else
+        showTunerOverlay();
+}
+
+void MainComponent::showTunerOverlay()
+{
+    if (tunerOverlay == nullptr)
+        tunerOverlay = std::make_unique<TunerOverlayComponent>(
+            appContext,
+            [this]() { hideTunerOverlay(); });
+
+    addAndMakeVisible(*tunerOverlay);
+
+    if (appContext.audioEngine != nullptr)
+    {
+        appContext.audioEngine->setTunerCaptureActive(true);
+
+        if (appContext.appConfig != nullptr)
+            appContext.audioEngine->setTunerMutesOutput(appContext.appConfig->getTunerMutesOutput());
+    }
+
+    tunerOverlay->toFront(false);
+    resized();
+    encoderNavigator.toFront(false);
+}
+
+void MainComponent::hideTunerOverlay()
+{
+    if (tunerOverlay == nullptr)
+        return;
+
+    removeChildComponent(tunerOverlay.get());
+    tunerOverlay.reset();
+
+    if (appContext.audioEngine != nullptr)
+        appContext.audioEngine->setTunerCaptureActive(false);
+
+    if (appContext.encoderNavigator != nullptr)
+        appContext.encoderNavigator->clearModalFocusChain();
+
+    resized();
+
+    if (performanceView != nullptr)
+        performanceView->syncEncoderFocus();
+
+    if (rackView != nullptr)
+        rackView->syncEncoderFocus();
+}
+
 juce::String MainComponent::describeUiSurfaceForDevTools() const
 {
     if (fullscreenPluginEditor != nullptr)
         return "Fullscreen Plugin Editor";
+
+    if (isTunerOverlayVisible())
+        return "Tuner";
 
     if (isProjectSceneJumpBrowserOpen())
         return "Jump Browser";

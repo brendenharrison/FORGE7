@@ -54,6 +54,7 @@ private:
 
     juce::TextButton chainPrevButton { "Chain -" };
     juce::TextButton chainNextButton { "Chain +" };
+    juce::TextButton tunerToggleButton { "Toggle Tuner" };
 
     juce::Label encoderSectionLabel { {}, "Main Encoder" };
     juce::TextButton encoderLeftButton { "Rotate Left" };

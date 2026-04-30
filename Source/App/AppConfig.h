@@ -38,6 +38,10 @@ public:
     juce::String getLastLoadedProjectPath() const;
     void setLastLoadedProjectPath(const juce::String& absolutePath);
 
+    /** When true, opening the fullscreen tuner silences main output (pedal-style). Default true. */
+    bool getTunerMutesOutput() const noexcept;
+    void setTunerMutesOutput(bool shouldMute) noexcept;
+
 private:
     juce::var settings;
 

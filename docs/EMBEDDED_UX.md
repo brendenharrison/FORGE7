@@ -23,6 +23,7 @@ Performance mode:
 - optimized for live use
 - large touch targets
 - chain/scene switching is the primary action
+- Chain - + Chain + chord opens fullscreen tuner (raw input; optional output mute in Settings)
 
 Rack/Edit mode:
 - editing surface for the active chain

@@ -329,6 +329,40 @@ SettingsComponent::SettingsComponent(AppContext& context, std::function<void()> 
     monitorHintLabel.setColour(juce::Label::textColourId, muted());
     addAndMakeVisible(monitorHintLabel);
 
+    sectionTunerLabel.setText("Tuner", juce::dontSendNotification);
+    sectionTunerLabel.setJustificationType(juce::Justification::centredLeft);
+    sectionTunerLabel.setFont(juce::Font(16.0f));
+    sectionTunerLabel.setColour(juce::Label::textColourId, accent());
+    addAndMakeVisible(sectionTunerLabel);
+
+    tunerMuteOutputToggle.setColour(juce::ToggleButton::textColourId, text());
+    tunerMuteOutputToggle.setColour(juce::ToggleButton::tickColourId, accent());
+    tunerMuteOutputToggle.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+    tunerMuteOutputToggle.setClickingTogglesState(true);
+
+    if (appContext.appConfig != nullptr)
+        tunerMuteOutputToggle.setToggleState(appContext.appConfig->getTunerMutesOutput(), juce::dontSendNotification);
+
+    tunerMuteOutputToggle.onClick = [this]()
+    {
+        if (appContext.appConfig == nullptr || appContext.audioEngine == nullptr)
+            return;
+
+        const bool on = tunerMuteOutputToggle.getToggleState();
+        appContext.appConfig->setTunerMutesOutput(on);
+        appContext.audioEngine->setTunerMutesOutput(on);
+        Logger::info("FORGE7: tuner mutes output " + juce::String(on ? "on" : "off"));
+    };
+
+    addAndMakeVisible(tunerMuteOutputToggle);
+
+    tunerMuteHintLabel.setText("When enabled, opening the tuner silences the main output.",
+                               juce::dontSendNotification);
+    tunerMuteHintLabel.setJustificationType(juce::Justification::topLeft);
+    tunerMuteHintLabel.setFont(juce::Font(12.0f));
+    tunerMuteHintLabel.setColour(juce::Label::textColourId, muted());
+    addAndMakeVisible(tunerMuteHintLabel);
+
     testToneHintLabel.setText("Test Tone verifies output only.", juce::dontSendNotification);
     testToneHintLabel.setJustificationType(juce::Justification::topLeft);
     testToneHintLabel.setFont(juce::Font(12.0f));
@@ -438,6 +472,14 @@ void SettingsComponent::resized()
 
     area.removeFromTop(2);
     testToneHintLabel.setBounds(area.removeFromTop(18));
+
+    area.removeFromTop(12);
+    sectionTunerLabel.setBounds(area.removeFromTop(22));
+    area.removeFromTop(4);
+    auto tunerRow = area.removeFromTop(28);
+    tunerMuteOutputToggle.setBounds(tunerRow.removeFromLeft(220));
+    tunerRow.removeFromLeft(10);
+    tunerMuteHintLabel.setBounds(tunerRow);
 
     area.removeFromTop(10);
 
@@ -673,6 +715,9 @@ void SettingsComponent::refreshStatus()
 
     inputMonitorToggle.setToggleState(engine->isInputMonitorEnabled(), juce::dontSendNotification);
 
+    if (appContext.appConfig != nullptr)
+        tunerMuteOutputToggle.setToggleState(appContext.appConfig->getTunerMutesOutput(), juce::dontSendNotification);
+
     // #region agent log
     // Throttle: timer is 8 Hz; log a snapshot every 16 ticks (~2 s) to keep noise low.
     if ((diagnosticTickCount++ % 16) == 0)
@@ -741,6 +786,9 @@ void SettingsComponent::saveAudioSettings()
         o->setProperty("bufferSize", setup.bufferSize);
         o->setProperty("audioInputChannelsMask", (int)setup.inputChannels.toInteger());
         o->setProperty("audioOutputChannelsMask", (int)setup.outputChannels.toInteger());
+
+        if (appContext.audioEngine != nullptr)
+            o->setProperty("tunerMutesOutput", appContext.audioEngine->getTunerMutesOutput());
     }
 
     const bool ok = appContext.appConfig->saveToFile();

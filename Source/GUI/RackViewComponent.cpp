@@ -153,36 +153,14 @@ RackViewComponent::RackViewComponent(AppContext& context)
 
     chainPrevButton.onClick = [this]()
     {
-        if (appContext.projectSession == nullptr)
-            return;
-
-        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
-                                                              : -1;
-        appContext.projectSession->previousChain();
-        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
-                                                             : -1;
-
-        if (before == 0 && after != 0)
-            Logger::info("FORGE7: Chain - wrapped from first to last");
-
-        refreshSlotDisplays();
+        if (appContext.mainComponent != nullptr)
+            appContext.mainComponent->handleChainPreviousFromUi();
     };
 
     chainNextButton.onClick = [this]()
     {
-        if (appContext.projectSession == nullptr)
-            return;
-
-        const int before = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
-                                                                : -1;
-        appContext.projectSession->nextChain();
-        const int after = appContext.sceneManager != nullptr ? appContext.sceneManager->getActiveChainVariationIndex()
-                                                             : -1;
-
-        if (after == 0 && before != 0)
-            Logger::info("FORGE7: Chain + wrapped from last to first");
-
-        refreshSlotDisplays();
+        if (appContext.mainComponent != nullptr)
+            appContext.mainComponent->handleChainNextFromUi();
     };
 
     addChainButton.onClick = [this]() { promptAddChain(); };

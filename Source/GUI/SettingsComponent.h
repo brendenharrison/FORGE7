@@ -84,6 +84,10 @@ private:
 
     juce::ToggleButton inputMonitorToggle { "Input Monitor" };
     juce::Label monitorHintLabel;
+
+    juce::Label sectionTunerLabel;
+    juce::ToggleButton tunerMuteOutputToggle { "Tuner mutes output" };
+    juce::Label tunerMuteHintLabel;
     juce::Label testToneHintLabel;
 
     std::unique_ptr<LevelMeter> inputMeter;

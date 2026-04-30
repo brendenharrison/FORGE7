@@ -138,7 +138,7 @@ void ControlManager::invokeSceneNavigationIfAttached(const HardwareControlEvent&
         projectSession->nextChain();
 }
 
-void ControlManager::notifyListeners(const HardwareControlEvent& e)
+void ControlManager::notifyListeners(const HardwareControlEvent& e, const bool suppressChainNavigationCallbacks)
 {
     const juce::ScopedLock lock(controlLock);
 
@@ -152,10 +152,14 @@ void ControlManager::notifyListeners(const HardwareControlEvent& e)
                                || e.type == HardwareControlType::ButtonReleased))
                            l.assignableButtonChanged(e.id, e.type == HardwareControlType::ButtonPressed);
 
-                       if (e.id == HardwareControlId::ChainPreviousButton && e.type == HardwareControlType::ButtonPressed)
+                       if (!suppressChainNavigationCallbacks
+                           && e.id == HardwareControlId::ChainPreviousButton
+                           && e.type == HardwareControlType::ButtonPressed)
                            l.chainVariationPreviousPressed();
 
-                       if (e.id == HardwareControlId::ChainNextButton && e.type == HardwareControlType::ButtonPressed)
+                       if (!suppressChainNavigationCallbacks
+                           && e.id == HardwareControlId::ChainNextButton
+                           && e.type == HardwareControlType::ButtonPressed)
                            l.chainVariationNextPressed();
 
                        if (isEncoderLogicalId(e.id))
@@ -189,9 +193,18 @@ void ControlManager::submitHardwareEvent(HardwareControlEvent event)
                          + hardwareControlSourceDebugName(event.source));
         }
 
+        bool consumedChainChord = false;
+
+        if (chainChordConsumer != nullptr && event.type == HardwareControlType::ButtonPressed
+            && (event.id == HardwareControlId::ChainPreviousButton || event.id == HardwareControlId::ChainNextButton))
+            consumedChainChord = chainChordConsumer(event);
+
         routeThroughMappingStub(event);
-        invokeSceneNavigationIfAttached(event);
-        notifyListeners(event);
+
+        if (! consumedChainChord)
+            invokeSceneNavigationIfAttached(event);
+
+        notifyListeners(event, consumedChainChord);
     };
 
     if (juce::MessageManager::getInstanceWithoutCreating() == nullptr)

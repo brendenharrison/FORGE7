@@ -119,6 +119,9 @@ void ForgeApplication::initialise(const juce::String& commandLineParameters)
     parameterMappingManager = std::make_unique<ParameterMappingManager>(*sceneManager, *pluginHostManager);
     audioEngine = std::make_unique<AudioEngine>(*pluginHostManager);
     audioEngine->initialiseAudioDeviceFromConfig(appConfig != nullptr ? appConfig->getAudioDeviceStateXml() : juce::String());
+
+    if (audioEngine != nullptr && appConfig != nullptr)
+        audioEngine->setTunerMutesOutput(appConfig->getTunerMutesOutput());
     Logger::info("FORGE7 AudioIO: device state xml len="
                  + juce::String(appConfig != nullptr ? appConfig->getAudioDeviceStateXml().length() : 0));
 

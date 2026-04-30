@@ -1,5 +1,7 @@
 #include "AudioEngine.h"
 
+#include <cstdint>
+
 #include <JuceHeader.h>
 
 #include <fstream>
@@ -487,6 +489,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
         meterOutputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
 
+        appendTunerPreFxMonoToRing(mono, numSamples);
+
         {
             auto& taps = pluginHostManager.getChainMeterTaps();
             taps.preChainPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
@@ -520,6 +524,8 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
     auto& meterTaps = pluginHostManager.getChainMeterTaps();
     meterTaps.preChainPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
 
+    appendTunerPreFxMonoToRing(mono, numSamples);
+
     if (! bypassChain)
         pluginHostManager.processMonoBlock(mono, numSamples);
     else
@@ -543,15 +549,19 @@ void AudioEngine::audioDeviceIOCallbackWithContext(const float* const* inputChan
 
     meterTaps.postOutputGainPeak.store(juce::jlimit(0.0f, 1.0f, outPeak), std::memory_order_relaxed);
 
+    const bool tunerCapturing = tunerCaptureActive.load(std::memory_order_relaxed) != 0;
+    const bool tunerMuteOut = tunerCapturing && (tunerMutesOutput.load(std::memory_order_relaxed) != 0);
+    const bool silenceOutput = (monitorOn == false) || tunerMuteOut;
+
     meterInputPeak.store(juce::jlimit(0.0f, 1.0f, inPeak), std::memory_order_relaxed);
-    meterOutputPeak.store(monitorOn ? juce::jlimit(0.0f, 1.0f, outPeak) : 0.0f, std::memory_order_relaxed);
+    meterOutputPeak.store(silenceOutput ? 0.0f : juce::jlimit(0.0f, 1.0f, outPeak), std::memory_order_relaxed);
 
     for (int ch = 0; ch < numOutputChannels; ++ch)
         if (outputChannelData[ch] != nullptr)
             juce::FloatVectorOperations::clear(outputChannelData[ch], numSamples);
 
-    if (! monitorOn)
-        return; // outputs already silenced; live monitor disabled
+    if (silenceOutput)
+        return;
 
     float* outPrimary = nullptr;
     float* outSecondary = nullptr;
@@ -595,6 +605,9 @@ void AudioEngine::audioDeviceAboutToStart(juce::AudioIODevice* device)
 
     monoWorkBuffer.assign(static_cast<size_t>(juce::jmax(1, block)), 0.0f);
     monoWorkBufferCapacity = block;
+
+    tunerPreFxRing.assign(16384u, 0.0f);
+    tunerRingWrite.store(0, std::memory_order_relaxed);
 
     pluginHostManager.prepareToPlay(sr, block);
 
@@ -647,6 +660,67 @@ void AudioEngine::audioDeviceStopped()
     inputPresentFlag.store(0u, std::memory_order_relaxed);
     clearInputChannelPeaks(inputChannelRawPeaks);
     pluginHostManager.getChainMeterTaps().resetPeaksToZero();
+    tunerRingWrite.store(0, std::memory_order_relaxed);
+}
+
+void AudioEngine::appendTunerPreFxMonoToRing(const float* mono, int numSamples) noexcept
+{
+    if (tunerCaptureActive.load(std::memory_order_relaxed) == 0)
+        return;
+
+    if (mono == nullptr || numSamples <= 0)
+        return;
+
+    const size_t cap = tunerPreFxRing.size();
+
+    if (cap == 0)
+        return;
+
+    uint64_t w = tunerRingWrite.load(std::memory_order_relaxed);
+
+    for (int i = 0; i < numSamples; ++i)
+    {
+        tunerPreFxRing[static_cast<size_t>(w % cap)] = mono[i];
+        ++w;
+    }
+
+    tunerRingWrite.store(w, std::memory_order_relaxed);
+}
+
+void AudioEngine::setTunerCaptureActive(const bool active) noexcept
+{
+    tunerCaptureActive.store(active ? 1u : 0u, std::memory_order_relaxed);
+}
+
+void AudioEngine::setTunerMutesOutput(const bool shouldMute) noexcept
+{
+    tunerMutesOutput.store(shouldMute ? 1u : 0u, std::memory_order_relaxed);
+}
+
+int AudioEngine::copyTunerMonoSnapshot(float* dst, const int dstCapacity) const noexcept
+{
+    if (dst == nullptr || dstCapacity <= 0)
+        return 0;
+
+    const size_t cap = tunerPreFxRing.size();
+
+    if (cap == 0)
+        return 0;
+
+    const auto w = static_cast<int64_t>(tunerRingWrite.load(std::memory_order_relaxed));
+    const int n = juce::jmin(dstCapacity, 4096);
+
+    for (int i = 0; i < n; ++i)
+    {
+        const int64_t back = w - static_cast<int64_t>(n - i);
+
+        if (back < 0)
+            dst[i] = 0.0f;
+        else
+            dst[i] = tunerPreFxRing[static_cast<size_t>(back) % cap];
+    }
+
+    return n;
 }
 
 } // namespace forge7

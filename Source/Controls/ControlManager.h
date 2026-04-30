@@ -1,5 +1,6 @@
 #pragma once
 
+#include <functional>
 #include <memory>
 
 #include <juce_gui_basics/juce_gui_basics.h>
@@ -60,6 +61,9 @@ public:
     /** Entry point for every transport - **the** normalization boundary. */
     void submitHardwareEvent(HardwareControlEvent event);
 
+    /** If set, receives Chain - / Chain + **pressed** first; return true to skip default chain navigation and chain nav listener callbacks (e.g. chord to tuner). Message thread. */
+    void setChainChordConsumer(std::function<bool(const HardwareControlEvent&)> fn) noexcept { chainChordConsumer = std::move(fn); }
+
     /** Hardware chain prev/next: capture outgoing rack into model, then crossfade (see `ProjectSession`). */
     void attachProjectSession(ProjectSession* session) noexcept;
 
@@ -69,7 +73,7 @@ private:
     void applyEventToState(const HardwareControlEvent& e);
     void routeThroughMappingStub(const HardwareControlEvent& e);
     void invokeSceneNavigationIfAttached(const HardwareControlEvent& e);
-    void notifyListeners(const HardwareControlEvent& e);
+    void notifyListeners(const HardwareControlEvent& e, bool suppressChainNavigationCallbacks);
 
     ParameterMappingManager& parameterMappingManager;
     HardwareControlState hardwareState {};
@@ -79,6 +83,8 @@ private:
     std::unique_ptr<MidiControlInput> midiInput;
 
     juce::ListenerList<Listener> listeners;
+
+    std::function<bool(const HardwareControlEvent&)> chainChordConsumer;
 
     mutable juce::CriticalSection controlLock;
 

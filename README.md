@@ -53,6 +53,8 @@ Note: older internal code may still use **ChainVariation** in places. User-facin
 - Primary live view.
 - Shows project, scene, active chain, K1-K4 assignments/value text, BPM/CPU/status.
 - Main input and output peak meters only (no per-slot meters); clip warnings match Rack metering.
+- Fullscreen **tuner**: press **Chain -** and **Chain +** within a short chord (~200 ms). Uses mono guitar input **before** the plugin chain (same path as pre-effects metering). Toggle again with the same chord or Close / encoder long press.
+- **Settings** includes **Tuner mutes output** (default on): when enabled, opening the tuner silences the main output while you tune.
 - Designed for live use and fast chain/scene switching.
 
 **Rack/Edit Mode**

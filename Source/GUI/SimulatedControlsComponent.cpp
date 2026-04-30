@@ -230,6 +230,12 @@ void SimulatedControlsComponent::resized()
     chainPrevButton.setBounds(chainRow.removeFromLeft(chainRow.getWidth() / 2).reduced(2, 2));
     chainNextButton.setBounds(chainRow.reduced(2, 2));
 
+    area.removeFromBottom(6);
+    {
+        auto tunRow = area.removeFromTop(34);
+        tunerToggleButton.setBounds(tunRow.removeFromLeft(juce::jmin(220, tunRow.getWidth())).reduced(2, 2));
+    }
+
     area.removeFromBottom(8);
 
     auto assignRow = area.removeFromTop(36);
@@ -435,6 +441,7 @@ void SimulatedControlsComponent::wireButtons()
 
     for (auto* b : { &chainPrevButton,
                      &chainNextButton,
+                     &tunerToggleButton,
                      &encoderLeftButton,
                      &encoderRightButton,
                      &encoderPressButton,
@@ -486,6 +493,12 @@ void SimulatedControlsComponent::wireButtons()
         e.value = 1.0f;
         lastEmittedId = e.id;
         appContext.controlManager->submitHardwareEvent(e);
+    };
+
+    tunerToggleButton.onClick = [this]()
+    {
+        if (appContext.mainComponent != nullptr)
+            appContext.mainComponent->toggleTunerOverlay();
     };
 
     encoderLeftButton.onClick = [this]() { emitEncoderDelta(-1); };
