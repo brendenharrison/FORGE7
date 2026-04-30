@@ -108,6 +108,28 @@ void EncoderNavigator::clearModalFocusChain() noexcept
     repaint();
 }
 
+void EncoderNavigator::clearRootFocusChain() noexcept
+{
+    rootItems.clear();
+
+    if (!modalActive)
+        focusIndex = -1;
+
+    repaint();
+}
+
+void EncoderNavigator::clearAllFocus(const bool logIfCleared) noexcept
+{
+    modalActive = false;
+    modalItems.clear();
+    rootItems.clear();
+    focusIndex = -1;
+    repaint();
+
+    if (logIfCleared)
+        Logger::info("FORGE7 Focus: clearAllFocus");
+}
+
 void EncoderNavigator::encoderNavigationEvent(const HardwareControlEvent& event)
 {
     if (event.id == HardwareControlId::EncoderRotate && event.type == HardwareControlType::RelativeDelta)
@@ -200,7 +222,12 @@ void EncoderNavigator::paint(juce::Graphics& g)
     if (chain.empty() || focusIndex < 0 || focusIndex >= static_cast<int>(chain.size()))
         return;
 
-    auto* target = chain[static_cast<size_t>(focusIndex)].target.getComponent();
+    const auto& item = chain[static_cast<size_t>(focusIndex)];
+
+    if (item.hideNavigatorFocusRing)
+        return;
+
+    auto* target = item.target.getComponent();
 
     if (target == nullptr || !target->isVisible())
         return;

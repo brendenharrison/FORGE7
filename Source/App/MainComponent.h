@@ -69,6 +69,9 @@ public:
     void hideTunerOverlay();
     bool isTunerOverlayVisible() const noexcept;
 
+    /** True when a fullscreen or blocking modal should own encoder focus (not base Performance/Rack). */
+    bool isModalOverlayOpen() const noexcept;
+
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     /** In-app fallback for simulated hardware (always visible inside the main window). */
     void toggleSimulatedControlsPanel();

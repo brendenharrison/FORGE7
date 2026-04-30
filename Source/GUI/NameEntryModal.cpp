@@ -50,6 +50,10 @@ void styleKeyButton(juce::TextButton& b)
     b.setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
 
+} // namespace
+
+namespace NameEntryModalDetail
+{
 std::vector<std::shared_ptr<NameEntryModal>> gActiveNameEntryModals;
 
 void registerActive(const std::shared_ptr<NameEntryModal>& m)
@@ -66,7 +70,20 @@ void unregisterActive(NameEntryModal* p)
     gActiveNameEntryModals.erase(it, gActiveNameEntryModals.end());
 }
 
-} // namespace
+bool anyVisible() noexcept
+{
+    for (const auto& m : gActiveNameEntryModals)
+        if (m != nullptr && m->isVisible())
+            return true;
+
+    return false;
+}
+} // namespace NameEntryModalDetail
+
+bool NameEntryModal::isAnyActiveInstanceVisible() noexcept
+{
+    return NameEntryModalDetail::anyVisible();
+}
 
 void NameEntryCard::paint(juce::Graphics& g)
 {
@@ -455,7 +472,7 @@ void NameEntryModal::dismissAsync()
             if (raw->getParentComponent() != nullptr)
                 raw->getParentComponent()->removeChildComponent(raw);
 
-            unregisterActive(raw);
+            NameEntryModalDetail::unregisterActive(raw);
         });
 }
 
@@ -589,7 +606,7 @@ void NameEntryModal::showSaveDialog(AppContext& appContextIn,
     modal->statusLabel.setText({}, juce::dontSendNotification);
     modal->applyPhaseVisibility();
 
-    registerActive(modal);
+    NameEntryModalDetail::registerActive(modal);
 
     auto& main = *appContextIn.mainComponent;
     main.addAndMakeVisible(modal.get());
@@ -624,7 +641,7 @@ void NameEntryModal::showPlainDialog(AppContext& appContextIn,
     modal->statusLabel.setText({}, juce::dontSendNotification);
     modal->applyPhaseVisibility();
 
-    registerActive(modal);
+    NameEntryModalDetail::registerActive(modal);
 
     auto& main = *appContextIn.mainComponent;
     main.addAndMakeVisible(modal.get());

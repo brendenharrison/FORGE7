@@ -15,6 +15,8 @@
 #include "../GUI/SettingsComponent.h"
 #include "../GUI/SimulatedControlsComponent.h"
 #include "../GUI/TunerOverlayComponent.h"
+#include "../GUI/NameEntryModal.h"
+#include "../GUI/UnsavedChangesModal.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../Utilities/Logger.h"
@@ -172,6 +174,32 @@ MainComponent::~MainComponent()
     appContext.mainComponent = nullptr;
 }
 
+bool MainComponent::isModalOverlayOpen() const noexcept
+{
+    if (settingsComponent != nullptr && settingsComponent->isShowing())
+        return true;
+
+    if (tunerOverlay != nullptr && tunerOverlay->isVisible())
+        return true;
+
+    if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
+        return true;
+
+    if (fullscreenPluginEditor != nullptr && fullscreenPluginEditor->isShowing())
+        return true;
+
+    if (rackView != nullptr && rackView->isPluginBrowserVisible())
+        return true;
+
+    if (NameEntryModal::isAnyActiveInstanceVisible())
+        return true;
+
+    if (UnsavedChangesModal::isAnyActiveInstanceVisible())
+        return true;
+
+    return false;
+}
+
 void MainComponent::refreshProjectDependentViews()
 {
     if (performanceView != nullptr)
@@ -205,6 +233,7 @@ void MainComponent::resized()
         settingsComponent->toFront(false);
         encoderNavigator.setBounds(bounds);
         encoderNavigator.toFront(false);
+        settingsComponent->syncEncoderFocus();
         return;
     }
 
@@ -268,6 +297,13 @@ void MainComponent::resized()
     }
 #endif
 
+    if (NameEntryModal::isAnyActiveInstanceVisible() || UnsavedChangesModal::isAnyActiveInstanceVisible())
+    {
+        Logger::info("FORGE7 Focus: ignored background focus sync because modal overlay is open");
+        encoderNavigator.toFront(false);
+        return;
+    }
+
     if (performanceView != nullptr)
         performanceView->syncEncoderFocus();
     if (rackView != nullptr)
@@ -313,12 +349,14 @@ void MainComponent::openSettings()
     if (settingsComponent != nullptr)
         return;
 
+    Logger::info("FORGE7 Focus: clearing background focus for Settings");
+    encoderNavigator.clearAllFocus(true);
+
     settingsReturnToEditMode = editMode;
 
     settingsComponent = std::make_unique<SettingsComponent>(appContext, [this]() { closeSettings(); });
     addAndMakeVisible(*settingsComponent);
     settingsComponent->toFront(true);
-    encoderNavigator.toFront(false);
     resized();
 }
 
@@ -357,10 +395,13 @@ void MainComponent::setEditMode(const bool shouldShowRackEditor)
     if (fullscreenPluginEditor != nullptr)
         encoderNavigator.toFront(false);
 
-    if (performanceView != nullptr)
-        performanceView->syncEncoderFocus();
-    if (rackView != nullptr)
-        rackView->syncEncoderFocus();
+    if (!isModalOverlayOpen())
+    {
+        if (performanceView != nullptr)
+            performanceView->syncEncoderFocus();
+        if (rackView != nullptr)
+            rackView->syncEncoderFocus();
+    }
 }
 
 void MainComponent::openFullscreenPluginEditor(const int slotIndex)
@@ -369,6 +410,8 @@ void MainComponent::openFullscreenPluginEditor(const int slotIndex)
         return;
 
     closeFullscreenPluginEditor();
+
+    encoderNavigator.clearAllFocus(true);
 
     fullscreenPluginEditor = std::make_unique<FullscreenPluginEditorComponent>(
         appContext,
@@ -497,6 +540,8 @@ void MainComponent::showProjectSceneJumpBrowser()
 {
     appContext.projectSceneJumpBrowserOpen = true;
 
+    encoderNavigator.clearAllFocus(true);
+
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     simulatedControlsDrawer.setAlwaysOnTop(false);
 #endif
@@ -577,6 +622,9 @@ void MainComponent::toggleTunerOverlay()
 
 void MainComponent::showTunerOverlay()
 {
+    Logger::info("FORGE7 Focus: clearing background focus for Tuner");
+    encoderNavigator.clearAllFocus(true);
+
     if (tunerOverlay == nullptr)
         tunerOverlay = std::make_unique<TunerOverlayComponent>(
             appContext,

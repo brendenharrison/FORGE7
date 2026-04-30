@@ -21,6 +21,8 @@
 #include "PluginBrowserComponent.h"
 #include "ChainControlsPanelComponent.h"
 #include "RackSlotCard.h"
+#include "NameEntryModal.h"
+#include "UnsavedChangesModal.h"
 
 namespace forge7
 {
@@ -1070,6 +1072,9 @@ void RackViewComponent::showPluginBrowser()
     pluginBrowser->setBounds(browserOverlay->getLocalBounds().reduced(6));
     pluginBrowser->toFront(false);
 
+    if (appContext.encoderNavigator != nullptr)
+        appContext.encoderNavigator->clearAllFocus(false);
+
     syncEncoderFocus();
 }
 
@@ -1136,6 +1141,9 @@ void RackViewComponent::syncEncoderFocus()
     if (appContext.projectSceneJumpBrowserOpen)
         return;
 
+    if (NameEntryModal::isAnyActiveInstanceVisible() || UnsavedChangesModal::isAnyActiveInstanceVisible())
+        return;
+
     if (browserOverlay != nullptr && browserOverlay->isVisible() && pluginBrowser != nullptr)
     {
         pluginBrowser->ensureDefaultListSelectionForEncoder();
@@ -1161,11 +1169,19 @@ void RackViewComponent::syncEncoderFocus()
                          {
                              setSelectedSlot(idx);
                          },
-                         {} });
+                         {},
+                         true });
     }
 
     if (addPluginCard != nullptr && addPluginCard->isVisible())
-        items.push_back({ addPluginCard.get(), [this]() { if (addPluginCard != nullptr) addPluginCard->onAddClicked(); }, {} });
+        items.push_back({ addPluginCard.get(),
+                         [this]()
+                         {
+                             if (addPluginCard != nullptr)
+                                 addPluginCard->onAddClicked();
+                         },
+                         {},
+                         true });
 
     items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
     items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });

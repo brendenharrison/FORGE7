@@ -4,6 +4,7 @@
 
 #include "../App/AppConfig.h"
 #include "../App/AppContext.h"
+#include "../Controls/EncoderNavigator.h"
 #include "../Audio/AudioEngine.h"
 #include "../GUI/LevelMeter.h"
 #include "../Platform/MacAudioPermission.h"
@@ -532,6 +533,12 @@ void SettingsComponent::resized()
         const int contentH = juce::jmax(520, deviceSelectorViewport->getHeight());
         deviceSelector->setSize(contentW, contentH);
     }
+}
+
+void SettingsComponent::syncEncoderFocus()
+{
+    if (appContext.encoderNavigator != nullptr)
+        appContext.encoderNavigator->clearAllFocus(false);
 }
 
 void SettingsComponent::timerCallback()

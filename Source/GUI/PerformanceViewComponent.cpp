@@ -23,6 +23,8 @@
 #include "../App/ProjectSession.h"
 #include "HardwareAssignableUi.h"
 #include "NavigationStatus.h"
+#include "NameEntryModal.h"
+#include "UnsavedChangesModal.h"
 
 namespace forge7
 {
@@ -383,6 +385,9 @@ void PerformanceViewComponent::syncEncoderFocus()
         return;
 
     if (appContext.projectSceneJumpBrowserOpen)
+        return;
+
+    if (NameEntryModal::isAnyActiveInstanceVisible() || UnsavedChangesModal::isAnyActiveInstanceVisible())
         return;
 
     std::vector<EncoderFocusItem> items;

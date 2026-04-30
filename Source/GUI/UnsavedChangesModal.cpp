@@ -37,6 +37,10 @@ void styleSecondaryButton(juce::TextButton& b)
     b.setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
 
+} // namespace
+
+namespace UnsavedChangesModalDetail
+{
 std::vector<std::shared_ptr<UnsavedChangesModal>> gActiveUnsavedModals;
 
 void registerActive(const std::shared_ptr<UnsavedChangesModal>& m)
@@ -53,7 +57,19 @@ void unregisterActive(UnsavedChangesModal* p)
     gActiveUnsavedModals.erase(it, gActiveUnsavedModals.end());
 }
 
-} // namespace
+bool anyVisible() noexcept
+{
+    for (const auto& m : gActiveUnsavedModals)
+        if (m != nullptr && m->isVisible())
+            return true;
+    return false;
+}
+} // namespace UnsavedChangesModalDetail
+
+bool UnsavedChangesModal::isAnyActiveInstanceVisible() noexcept
+{
+    return UnsavedChangesModalDetail::anyVisible();
+}
 
 void UnsavedChangesModal::Card::paint(juce::Graphics& g)
 {
@@ -222,7 +238,7 @@ void UnsavedChangesModal::dismissAsync()
             if (raw->getParentComponent() != nullptr)
                 raw->getParentComponent()->removeChildComponent(raw);
 
-            unregisterActive(raw);
+            UnsavedChangesModalDetail::unregisterActive(raw);
         });
 }
 
@@ -234,7 +250,7 @@ void UnsavedChangesModal::show(AppContext& appContextIn, std::function<void(Unsa
     auto modal = std::make_shared<UnsavedChangesModal>(appContextIn);
     modal->onChosen = std::move(onChosenIn);
 
-    registerActive(modal);
+    UnsavedChangesModalDetail::registerActive(modal);
 
     auto& main = *appContextIn.mainComponent;
     main.addAndMakeVisible(modal.get());

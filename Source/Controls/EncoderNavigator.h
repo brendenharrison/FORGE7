@@ -36,6 +36,12 @@ public:
 
     void clearModalFocusChain() noexcept;
 
+    /** Discards the root (Performance/Rack) focus chain. Safe while a modal chain is active. */
+    void clearRootFocusChain() noexcept;
+
+    /** Clears root + modal chains and removes the focus ring. @param logIfCleared if true, logs FORGE7 Focus: clearAllFocus. */
+    void clearAllFocus(bool logIfCleared = true) noexcept;
+
     bool hasModalFocusChain() const noexcept { return modalActive; }
 
     /** Long-press encoder: close modal first, then optional app-level back (e.g. leave edit mode). */

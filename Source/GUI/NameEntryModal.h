@@ -54,6 +54,9 @@ public:
                                 std::function<void(const juce::String& name)> onConfirm,
                                 std::function<void()> onCancel = {});
 
+    /** True if any in-app name dialog is visible (message thread). */
+    static bool isAnyActiveInstanceVisible() noexcept;
+
     void paint(juce::Graphics& g) override;
     void resized() override;
     void parentSizeChanged() override;
