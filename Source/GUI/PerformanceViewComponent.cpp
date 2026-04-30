@@ -23,6 +23,8 @@
 #include "../App/ProjectSession.h"
 #include "HardwareAssignableUi.h"
 #include "NavigationStatus.h"
+#include "NameEntryModal.h"
+#include "UnsavedChangesModal.h"
 
 namespace forge7
 {
@@ -377,7 +379,7 @@ void PerformanceViewComponent::timerCallback()
     refreshHud();
 }
 
-void PerformanceViewComponent::syncEncoderFocus()
+void PerformanceViewComponent::syncEncoderFocus(const bool resetToFirst)
 {
     if (appContext.encoderNavigator == nullptr || !isShowing())
         return;
@@ -385,24 +387,40 @@ void PerformanceViewComponent::syncEncoderFocus()
     if (appContext.projectSceneJumpBrowserOpen)
         return;
 
+    if (NameEntryModal::isAnyActiveInstanceVisible() || UnsavedChangesModal::isAnyActiveInstanceVisible())
+        return;
+
     std::vector<EncoderFocusItem> items;
 
+    // Top row in strict left-to-right visual order.
     items.push_back({ &rackEditButton, [this]() { rackEditButton.triggerClick(); }, {} });
+    items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    if (simHwButton.isVisible())
+        items.push_back({ &simHwButton, [this]() { simHwButton.triggerClick(); }, {} });
+#endif
+
+    // Scene row.
     items.push_back({ &scenePrevButton, [this]() { scenePrevButton.triggerClick(); }, {} });
     items.push_back({ &sceneNextButton, [this]() { sceneNextButton.triggerClick(); }, {} });
+
+    // Chain row.
     items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
     items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });
 
+    // K1..K4 row.
     for (size_t i = 0; i < knobCards.size(); ++i)
     {
         if (knobCards[i] != nullptr)
             items.push_back({ knobCards[i].get(), [] {}, {} });
     }
 
+    // Button 1 / 2 row.
     items.push_back({ &assign1FunctionLabel, [] {}, {} });
     items.push_back({ &assign2FunctionLabel, [] {}, {} });
 
-    items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
+    if (resetToFirst)
+        appContext.encoderNavigator->clearRootFocusChain();
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
 }
@@ -584,7 +602,7 @@ void PerformanceViewComponent::refreshHud()
         }
     }
 
-    syncEncoderFocus();
+    // Keep HUD refresh lightweight; avoid rebuilding focus chain every timer tick.
 }
 
 void PerformanceViewComponent::resized()

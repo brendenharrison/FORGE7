@@ -21,6 +21,8 @@
 #include "PluginBrowserComponent.h"
 #include "ChainControlsPanelComponent.h"
 #include "RackSlotCard.h"
+#include "NameEntryModal.h"
+#include "UnsavedChangesModal.h"
 
 namespace forge7
 {
@@ -902,7 +904,7 @@ void RackViewComponent::refreshSlotDisplays()
         }
 
         slotCards[static_cast<size_t>(i)]->refreshFromSlotInfo(info);
-        slotCards[static_cast<size_t>(i)]->setSelected(selectedSlotIndex == i);
+        slotCards[static_cast<size_t>(i)]->setSelected(visualFocusedSlotIndex == i);
     }
 
     if (chainControlsPanel != nullptr)
@@ -950,6 +952,7 @@ void RackViewComponent::wireSlotCallbacks(const int slotIndex)
     card.onSelect = [this](int idx)
     {
         setSelectedSlot(idx);
+        setVisualFocusedSlot(idx);
     };
 
     card.onBypassChanged = [this](int idx, bool bypassed)
@@ -982,12 +985,68 @@ void RackViewComponent::wireSlotCallbacks(const int slotIndex)
 void RackViewComponent::setSelectedSlot(const int slotIndex)
 {
     selectedSlotIndex = slotIndex;
+    // Visual slot highlighting is driven by encoder focus row state, not persistent slot targeting.
+}
+
+void RackViewComponent::setVisualFocusedSlot(const int slotIndex)
+{
+    visualFocusedSlotIndex = juce::isPositiveAndBelow(slotIndex, kPluginChainMaxSlots) ? slotIndex : -1;
 
     for (int i = 0; i < kPluginChainMaxSlots; ++i)
         if (slotCards[static_cast<size_t>(i)] != nullptr)
-            slotCards[static_cast<size_t>(i)]->setSelected(i == selectedSlotIndex);
+            slotCards[static_cast<size_t>(i)]->setSelected(i == visualFocusedSlotIndex);
+}
 
-    // Details panel is chain-level (not slot-level); no per-slot selection binding.
+void RackViewComponent::clearVisualSlotHighlights()
+{
+    setVisualFocusedSlot(-1);
+}
+
+void RackViewComponent::ensureRackChainItemVisible(juce::Component& item)
+{
+    if (chainContent == nullptr || !item.isShowing())
+        return;
+
+    if (item.getParentComponent() != chainContent.get())
+        return;
+
+    auto visible = chainViewport.getViewArea();
+    auto b = item.getBounds();
+    constexpr int margin = 10;
+
+    int targetX = visible.getX();
+
+    if (b.getX() < visible.getX() + margin)
+        targetX = juce::jmax(0, b.getX() - margin);
+    else if (b.getRight() > visible.getRight() - margin)
+        targetX = juce::jmax(0, b.getRight() - visible.getWidth() + margin);
+
+    if (targetX != visible.getX())
+        chainViewport.setViewPosition(targetX, visible.getY());
+}
+
+void RackViewComponent::handleEncoderFocusForRackItem(const RackFocusKind kind, juce::Component* target, const int slotIndex)
+{
+    const bool isVstRow = (kind == RackFocusKind::VstSlot || kind == RackFocusKind::AddPlugin);
+    const bool wasVstRow = (lastEncoderFocusKind == RackFocusKind::VstSlot || lastEncoderFocusKind == RackFocusKind::AddPlugin);
+
+    if (isVstRow && !wasVstRow)
+        chainViewport.setViewPosition(0, chainViewport.getViewPositionY());
+
+    if (kind == RackFocusKind::VstSlot)
+    {
+        setSelectedSlot(slotIndex);
+        setVisualFocusedSlot(slotIndex);
+    }
+    else
+    {
+        clearVisualSlotHighlights();
+    }
+
+    if (isVstRow && target != nullptr)
+        ensureRackChainItemVisible(*target);
+
+    lastEncoderFocusKind = kind;
 }
 
 void RackViewComponent::selectRackSlot(const int slotIndex)
@@ -1070,6 +1129,9 @@ void RackViewComponent::showPluginBrowser()
     pluginBrowser->setBounds(browserOverlay->getLocalBounds().reduced(6));
     pluginBrowser->toFront(false);
 
+    if (appContext.encoderNavigator != nullptr)
+        appContext.encoderNavigator->clearAllFocus(false);
+
     syncEncoderFocus();
 }
 
@@ -1136,6 +1198,9 @@ void RackViewComponent::syncEncoderFocus()
     if (appContext.projectSceneJumpBrowserOpen)
         return;
 
+    if (NameEntryModal::isAnyActiveInstanceVisible() || UnsavedChangesModal::isAnyActiveInstanceVisible())
+        return;
+
     if (browserOverlay != nullptr && browserOverlay->isVisible() && pluginBrowser != nullptr)
     {
         pluginBrowser->ensureDefaultListSelectionForEncoder();
@@ -1146,43 +1211,105 @@ void RackViewComponent::syncEncoderFocus()
     appContext.encoderNavigator->clearModalFocusChain();
 
     std::vector<EncoderFocusItem> items;
+    int visibleSlotCount = 0;
 
+    auto pushButtonItem = [this, &items](juce::Component* target,
+                                         std::function<void()> onActivate,
+                                         const RackFocusKind kind)
+    {
+        if (target == nullptr || !target->isVisible() || !target->isEnabled())
+            return;
+
+        items.push_back({ target,
+                         std::move(onActivate),
+                         {},
+                         false,
+                         [this, kind, target]()
+                         {
+                             handleEncoderFocusForRackItem(kind, target, -1);
+                         } });
+    };
+
+    // Row 1: top/header controls (left -> right in reading order)
+    pushButtonItem(&chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, RackFocusKind::TopRow);
+    pushButtonItem(&chainNextButton, [this]() { chainNextButton.triggerClick(); }, RackFocusKind::TopRow);
+    pushButtonItem(&addChainButton, [this]() { addChainButton.triggerClick(); }, RackFocusKind::TopRow);
+    pushButtonItem(&renameChainButton, [this]() { renameChainButton.triggerClick(); }, RackFocusKind::TopRow);
+    pushButtonItem(&addSceneButton, [this]() { addSceneButton.triggerClick(); }, RackFocusKind::TopRow);
+    pushButtonItem(&renameSceneButton, [this]() { renameSceneButton.triggerClick(); }, RackFocusKind::TopRow);
+#if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
+    pushButtonItem(&simHwButton, [this]() { simHwButton.triggerClick(); }, RackFocusKind::TopRow);
+#endif
+    pushButtonItem(&globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, RackFocusKind::TopRow);
+
+    // Row 2: VST lane (left -> right), then Add Plugin.
     for (int i = 0; i < kPluginChainMaxSlots; ++i)
     {
-        if (slotCards[static_cast<size_t>(i)] == nullptr)
+        auto* card = slotCards[static_cast<size_t>(i)].get();
+        if (card == nullptr || !card->isVisible())
             continue;
 
-        if (!slotCards[static_cast<size_t>(i)]->isVisible())
-            continue;
-
+        ++visibleSlotCount;
         const int idx = i;
-        items.push_back({ slotCards[static_cast<size_t>(i)].get(),
+        items.push_back({ card,
                          [this, idx]()
                          {
                              setSelectedSlot(idx);
+                             setVisualFocusedSlot(idx);
+
+                             auto* chain = appContext.pluginHostManager != nullptr
+                                               ? appContext.pluginHostManager->getPluginChain()
+                                               : nullptr;
+                             if (chain == nullptr)
+                                 return;
+
+                             const auto info = chain->getSlotInfo(idx);
+                             const bool loadedPlugin = !info.isEmpty && !info.missingPlugin && !info.isPlaceholder;
+                             if (!loadedPlugin)
+                                 return;
+
+                             if (auto* main = findParentComponentOfClass<MainComponent>())
+                                 main->openFullscreenPluginEditor(idx);
                          },
-                         {} });
+                         {},
+                         true,
+                         [this, idx, card]()
+                         {
+                             handleEncoderFocusForRackItem(RackFocusKind::VstSlot, card, idx);
+                         } });
     }
 
     if (addPluginCard != nullptr && addPluginCard->isVisible())
-        items.push_back({ addPluginCard.get(), [this]() { if (addPluginCard != nullptr) addPluginCard->onAddClicked(); }, {} });
+    {
+        auto* addCard = addPluginCard.get();
+        items.push_back({ addCard,
+                         [this]()
+                         {
+                             if (addPluginCard != nullptr)
+                                 addPluginCard->onAddClicked();
+                         },
+                         {},
+                         false,
+                         [this, addCard]()
+                         {
+                             handleEncoderFocusForRackItem(RackFocusKind::AddPlugin, addCard, -1);
+                         } });
+    }
 
-    items.push_back({ &chainPrevButton, [this]() { chainPrevButton.triggerClick(); }, {} });
-    items.push_back({ &chainNextButton, [this]() { chainNextButton.triggerClick(); }, {} });
-    items.push_back({ &addChainButton, [this]() { addChainButton.triggerClick(); }, {} });
-    items.push_back({ &renameChainButton, [this]() { renameChainButton.triggerClick(); }, {} });
-    items.push_back({ &addSceneButton, [this]() { addSceneButton.triggerClick(); }, {} });
-    items.push_back({ &renameSceneButton, [this]() { renameSceneButton.triggerClick(); }, {} });
+    // Row 3: context/action row.
+    pushButtonItem(&ctxMoveLeftButton, [this]() { ctxMoveLeftButton.triggerClick(); }, RackFocusKind::ContextRow);
+    pushButtonItem(&ctxMoveRightButton, [this]() { ctxMoveRightButton.triggerClick(); }, RackFocusKind::ContextRow);
+    pushButtonItem(&ctxBypassToggle, [this]() { ctxBypassToggle.triggerClick(); }, RackFocusKind::ContextRow);
+    pushButtonItem(&ctxRemoveButton, [this]() { ctxRemoveButton.triggerClick(); }, RackFocusKind::ContextRow);
+    pushButtonItem(&ctxReplaceButton, [this]() { ctxReplaceButton.triggerClick(); }, RackFocusKind::ContextRow);
+    pushButtonItem(&ctxEditorButton, [this]() { ctxEditorButton.triggerClick(); }, RackFocusKind::ContextRow);
 
-    items.push_back({ &ctxMoveLeftButton, [this]() { ctxMoveLeftButton.triggerClick(); }, {} });
-    items.push_back({ &ctxMoveRightButton, [this]() { ctxMoveRightButton.triggerClick(); }, {} });
-    items.push_back({ &ctxBypassToggle, [this]() { ctxBypassToggle.triggerClick(); }, {} });
-    items.push_back({ &ctxRemoveButton, [this]() { ctxRemoveButton.triggerClick(); }, {} });
-    items.push_back({ &ctxReplaceButton, [this]() { ctxReplaceButton.triggerClick(); }, {} });
-    items.push_back({ &ctxEditorButton, [this]() { ctxEditorButton.triggerClick(); }, {} });
-    items.push_back({ &globalBypassFxToggle, [this]() { globalBypassFxToggle.triggerClick(); }, {} });
-    items.push_back({ &navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, {} });
-    items.push_back({ &settingsButton, [this]() { settingsButton.triggerClick(); }, {} });
+    // Row 4: bottom nav.
+    pushButtonItem(&navPerformanceButton, [this]() { navPerformanceButton.triggerClick(); }, RackFocusKind::BottomRow);
+    pushButtonItem(&settingsButton, [this]() { settingsButton.triggerClick(); }, RackFocusKind::BottomRow);
+
+    Logger::info("FORGE7 RackFocus: sync root items=" + juce::String((int)items.size())
+                 + " visibleSlots=" + juce::String(visibleSlotCount));
 
     appContext.encoderNavigator->setRootFocusChain(std::move(items));
 }

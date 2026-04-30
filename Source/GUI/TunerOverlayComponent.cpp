@@ -202,7 +202,8 @@ void TunerOverlayComponent::visibilityChanged()
                               if (onRequestClose != nullptr)
                                   onRequestClose();
                           },
-                          {} });
+                          {},
+                          true });
         appContext.encoderNavigator->setModalFocusChain(std::move(items));
     }
     else

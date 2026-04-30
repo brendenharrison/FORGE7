@@ -15,6 +15,8 @@
 #include "../GUI/SettingsComponent.h"
 #include "../GUI/SimulatedControlsComponent.h"
 #include "../GUI/TunerOverlayComponent.h"
+#include "../GUI/NameEntryModal.h"
+#include "../GUI/UnsavedChangesModal.h"
 #include "../PluginHost/PluginChain.h"
 #include "../PluginHost/PluginHostManager.h"
 #include "../Utilities/Logger.h"
@@ -172,6 +174,50 @@ MainComponent::~MainComponent()
     appContext.mainComponent = nullptr;
 }
 
+bool MainComponent::isModalOverlayOpen() const noexcept
+{
+    if (settingsComponent != nullptr && settingsComponent->isShowing())
+        return true;
+
+    if (tunerOverlay != nullptr && tunerOverlay->isVisible())
+        return true;
+
+    if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
+        return true;
+
+    if (fullscreenPluginEditor != nullptr && fullscreenPluginEditor->isShowing())
+        return true;
+
+    if (rackView != nullptr && rackView->isPluginBrowserVisible())
+        return true;
+
+    if (NameEntryModal::isAnyActiveInstanceVisible())
+        return true;
+
+    if (UnsavedChangesModal::isAnyActiveInstanceVisible())
+        return true;
+
+    return false;
+}
+
+void MainComponent::restoreBaseFocus()
+{
+    if (isModalOverlayOpen())
+        return;
+
+    encoderNavigator.setFocusOverlayEnabled(true);
+
+    if (editMode)
+    {
+        if (rackView != nullptr)
+            rackView->syncEncoderFocus();
+    }
+    else if (performanceView != nullptr)
+    {
+        performanceView->syncEncoderFocus();
+    }
+}
+
 void MainComponent::refreshProjectDependentViews()
 {
     if (performanceView != nullptr)
@@ -193,6 +239,7 @@ void MainComponent::resized()
     if (fullscreenPluginEditor != nullptr && fullscreenPluginEditor->isShowing())
     {
         fullscreenPluginEditor->setBounds(bounds);
+        encoderNavigator.setFocusOverlayEnabled(true);
         encoderNavigator.setBounds(bounds);
         encoderNavigator.toFront(false);
         fullscreenPluginEditor->syncEncoderFocus();
@@ -203,14 +250,17 @@ void MainComponent::resized()
     {
         settingsComponent->setBounds(bounds);
         settingsComponent->toFront(false);
+        encoderNavigator.setFocusOverlayEnabled(false);
         encoderNavigator.setBounds(bounds);
         encoderNavigator.toFront(false);
+        settingsComponent->syncEncoderFocus();
         return;
     }
 
     if (projectSceneJumpBrowser != nullptr && projectSceneJumpBrowser->isVisible())
     {
         projectSceneJumpBrowser->setBounds(bounds);
+        encoderNavigator.setFocusOverlayEnabled(true);
         encoderNavigator.setBounds(bounds);
         projectSceneJumpBrowser->toFront(false);
         encoderNavigator.toFront(false);
@@ -221,6 +271,7 @@ void MainComponent::resized()
     {
         tunerOverlay->setBounds(bounds);
         tunerOverlay->toFront(false);
+        encoderNavigator.setFocusOverlayEnabled(false);
         encoderNavigator.setBounds(bounds);
         encoderNavigator.toFront(false);
         return;
@@ -231,6 +282,7 @@ void MainComponent::resized()
     if (rackView != nullptr)
         rackView->setBounds(bounds);
 
+    encoderNavigator.setFocusOverlayEnabled(true);
     encoderNavigator.setBounds(bounds);
 
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
@@ -267,6 +319,13 @@ void MainComponent::resized()
         simulatedControlsDrawer.setBounds({});
     }
 #endif
+
+    if (isModalOverlayOpen())
+    {
+        Logger::info("FORGE7 Focus: ignored background focus sync because modal overlay is open");
+        encoderNavigator.toFront(false);
+        return;
+    }
 
     if (performanceView != nullptr)
         performanceView->syncEncoderFocus();
@@ -313,12 +372,15 @@ void MainComponent::openSettings()
     if (settingsComponent != nullptr)
         return;
 
+    Logger::info("FORGE7 Focus: clearing background focus for Settings");
+    encoderNavigator.clearAllFocus(true);
+    encoderNavigator.setFocusOverlayEnabled(false);
+
     settingsReturnToEditMode = editMode;
 
     settingsComponent = std::make_unique<SettingsComponent>(appContext, [this]() { closeSettings(); });
     addAndMakeVisible(*settingsComponent);
     settingsComponent->toFront(true);
-    encoderNavigator.toFront(false);
     resized();
 }
 
@@ -332,10 +394,12 @@ void MainComponent::closeSettings()
 
     setEditMode(settingsReturnToEditMode);
     resized();
+    restoreBaseFocus();
 }
 
 void MainComponent::setEditMode(const bool shouldShowRackEditor)
 {
+    const bool wasEditMode = editMode;
     editMode = shouldShowRackEditor;
 
     if (!editMode && rackView != nullptr)
@@ -357,10 +421,10 @@ void MainComponent::setEditMode(const bool shouldShowRackEditor)
     if (fullscreenPluginEditor != nullptr)
         encoderNavigator.toFront(false);
 
-    if (performanceView != nullptr)
-        performanceView->syncEncoderFocus();
-    if (rackView != nullptr)
-        rackView->syncEncoderFocus();
+    restoreBaseFocus();
+
+    if (wasEditMode && !editMode && !isModalOverlayOpen() && performanceView != nullptr)
+        performanceView->syncEncoderFocus(true);
 }
 
 void MainComponent::openFullscreenPluginEditor(const int slotIndex)
@@ -369,6 +433,9 @@ void MainComponent::openFullscreenPluginEditor(const int slotIndex)
         return;
 
     closeFullscreenPluginEditor();
+
+    encoderNavigator.clearAllFocus(true);
+    encoderNavigator.setFocusOverlayEnabled(true);
 
     fullscreenPluginEditor = std::make_unique<FullscreenPluginEditorComponent>(
         appContext,
@@ -394,10 +461,7 @@ void MainComponent::closeFullscreenPluginEditor()
 
     resized();
 
-    if (rackView != nullptr)
-        rackView->syncEncoderFocus();
-    else if (performanceView != nullptr)
-        performanceView->syncEncoderFocus();
+    restoreBaseFocus();
 }
 
 void MainComponent::closeFullscreenPluginEditorIfShowingSlot(const int slotIndex)
@@ -497,6 +561,9 @@ void MainComponent::showProjectSceneJumpBrowser()
 {
     appContext.projectSceneJumpBrowserOpen = true;
 
+    encoderNavigator.clearAllFocus(true);
+    encoderNavigator.setFocusOverlayEnabled(true);
+
 #if FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
     simulatedControlsDrawer.setAlwaysOnTop(false);
 #endif
@@ -541,13 +608,8 @@ void MainComponent::closeProjectSceneJumpBrowser()
     if (appContext.encoderNavigator != nullptr)
         appContext.encoderNavigator->clearModalFocusChain();
 
-    if (performanceView != nullptr)
-        performanceView->syncEncoderFocus();
-
-    if (rackView != nullptr)
-        rackView->syncEncoderFocus();
-
     resized();
+    restoreBaseFocus();
 }
 
 void MainComponent::handleChainPreviousFromUi()
@@ -577,6 +639,10 @@ void MainComponent::toggleTunerOverlay()
 
 void MainComponent::showTunerOverlay()
 {
+    Logger::info("FORGE7 Focus: clearing background focus for Tuner");
+    encoderNavigator.clearAllFocus(true);
+    encoderNavigator.setFocusOverlayEnabled(false);
+
     if (tunerOverlay == nullptr)
         tunerOverlay = std::make_unique<TunerOverlayComponent>(
             appContext,
@@ -612,12 +678,7 @@ void MainComponent::hideTunerOverlay()
         appContext.encoderNavigator->clearModalFocusChain();
 
     resized();
-
-    if (performanceView != nullptr)
-        performanceView->syncEncoderFocus();
-
-    if (rackView != nullptr)
-        rackView->syncEncoderFocus();
+    restoreBaseFocus();
 }
 
 juce::String MainComponent::describeUiSurfaceForDevTools() const

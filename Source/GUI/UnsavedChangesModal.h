@@ -24,6 +24,8 @@ public:
 
     static void show(AppContext& appContext, std::function<void(UnsavedProjectChoice)> onChosen);
 
+    static bool isAnyActiveInstanceVisible() noexcept;
+
     void paint(juce::Graphics& g) override;
     void resized() override;
     void parentSizeChanged() override;

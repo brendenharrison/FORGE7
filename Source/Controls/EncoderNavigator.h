@@ -36,6 +36,16 @@ public:
 
     void clearModalFocusChain() noexcept;
 
+    /** Discards the root (Performance/Rack) focus chain. Safe while a modal chain is active. */
+    void clearRootFocusChain() noexcept;
+
+    /** Clears root + modal chains and removes the focus ring. @param logIfCleared if true, logs FORGE7 Focus: clearAllFocus. */
+    void clearAllFocus(bool logIfCleared = true) noexcept;
+
+    /** Controls visual drawing only. Hardware navigation events still route through this component. */
+    void setFocusOverlayEnabled(bool shouldDraw) noexcept;
+    bool isFocusOverlayEnabled() const noexcept { return focusOverlayEnabled; }
+
     bool hasModalFocusChain() const noexcept { return modalActive; }
 
     /** Long-press encoder: close modal first, then optional app-level back (e.g. leave edit mode). */
@@ -55,6 +65,7 @@ private:
 
     const std::vector<EncoderFocusItem>& activeChain() const noexcept;
     std::vector<EncoderFocusItem>& activeChain() noexcept;
+    void triggerOnFocusForCurrentItem();
 
     void moveFocusBySteps(int deltaSteps);
     void activateFocused();
@@ -66,6 +77,7 @@ private:
     std::vector<EncoderFocusItem> rootItems;
     std::vector<EncoderFocusItem> modalItems;
     bool modalActive = false;
+    bool focusOverlayEnabled = true;
 
     int focusIndex = 0;
 

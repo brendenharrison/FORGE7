@@ -81,6 +81,9 @@ void EncoderNavigator::setRootFocusChain(std::vector<EncoderFocusItem> items)
             focusIndex = juce::jlimit(0, static_cast<int>(rootItems.size()) - 1, oldIdx);
     }
 
+    if (!modalActive)
+        triggerOnFocusForCurrentItem();
+
     repaint();
 }
 
@@ -89,6 +92,7 @@ void EncoderNavigator::setModalFocusChain(std::vector<EncoderFocusItem> items)
     modalItems = std::move(items);
     modalActive = !modalItems.empty();
     focusIndex = modalActive ? 0 : juce::jlimit(-1, static_cast<int>(rootItems.size()) - 1, focusIndex);
+    triggerOnFocusForCurrentItem();
     repaint();
 }
 
@@ -105,6 +109,38 @@ void EncoderNavigator::clearModalFocusChain() noexcept
     else
         focusIndex = juce::jlimit(0, static_cast<int>(rootItems.size()) - 1, focusIndex);
 
+    triggerOnFocusForCurrentItem();
+    repaint();
+}
+
+void EncoderNavigator::clearRootFocusChain() noexcept
+{
+    rootItems.clear();
+
+    if (!modalActive)
+        focusIndex = -1;
+
+    repaint();
+}
+
+void EncoderNavigator::clearAllFocus(const bool logIfCleared) noexcept
+{
+    modalActive = false;
+    modalItems.clear();
+    rootItems.clear();
+    focusIndex = -1;
+    repaint();
+
+    if (logIfCleared)
+        Logger::info("FORGE7 Focus: clearAllFocus");
+}
+
+void EncoderNavigator::setFocusOverlayEnabled(const bool shouldDraw) noexcept
+{
+    if (focusOverlayEnabled == shouldDraw)
+        return;
+
+    focusOverlayEnabled = shouldDraw;
     repaint();
 }
 
@@ -168,6 +204,7 @@ void EncoderNavigator::moveFocusBySteps(const int deltaSteps)
     if (focusIndex < 0)
         focusIndex += n;
 
+    triggerOnFocusForCurrentItem();
     repaint();
 }
 
@@ -184,6 +221,19 @@ void EncoderNavigator::activateFocused()
         item.onActivate();
 }
 
+void EncoderNavigator::triggerOnFocusForCurrentItem()
+{
+    auto& chain = activeChain();
+
+    if (focusIndex < 0 || focusIndex >= static_cast<int>(chain.size()))
+        return;
+
+    auto& item = chain[static_cast<size_t>(focusIndex)];
+
+    if (item.onFocus != nullptr)
+        item.onFocus();
+}
+
 void EncoderNavigator::repaintFocusArea()
 {
     repaint();
@@ -191,6 +241,9 @@ void EncoderNavigator::repaintFocusArea()
 
 void EncoderNavigator::paint(juce::Graphics& g)
 {
+    if (!focusOverlayEnabled)
+        return;
+
     auto* parent = getParentComponent();
     if (parent == nullptr)
         return;
@@ -200,7 +253,12 @@ void EncoderNavigator::paint(juce::Graphics& g)
     if (chain.empty() || focusIndex < 0 || focusIndex >= static_cast<int>(chain.size()))
         return;
 
-    auto* target = chain[static_cast<size_t>(focusIndex)].target.getComponent();
+    const auto& item = chain[static_cast<size_t>(focusIndex)];
+
+    if (item.hideNavigatorFocusRing)
+        return;
+
+    auto* target = item.target.getComponent();
 
     if (target == nullptr || !target->isVisible())
         return;

@@ -24,6 +24,9 @@ public:
     void paint(juce::Graphics& g) override;
     void resized() override;
 
+    /** Encoder overlay while Settings is fullscreen: V1 clears rings (full Settings chain can be added later). */
+    void syncEncoderFocus();
+
 private:
     void timerCallback() override;
 
