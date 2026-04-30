@@ -130,6 +130,15 @@ void EncoderNavigator::clearAllFocus(const bool logIfCleared) noexcept
         Logger::info("FORGE7 Focus: clearAllFocus");
 }
 
+void EncoderNavigator::setFocusOverlayEnabled(const bool shouldDraw) noexcept
+{
+    if (focusOverlayEnabled == shouldDraw)
+        return;
+
+    focusOverlayEnabled = shouldDraw;
+    repaint();
+}
+
 void EncoderNavigator::encoderNavigationEvent(const HardwareControlEvent& event)
 {
     if (event.id == HardwareControlId::EncoderRotate && event.type == HardwareControlType::RelativeDelta)
@@ -213,6 +222,9 @@ void EncoderNavigator::repaintFocusArea()
 
 void EncoderNavigator::paint(juce::Graphics& g)
 {
+    if (!focusOverlayEnabled)
+        return;
+
     auto* parent = getParentComponent();
     if (parent == nullptr)
         return;

@@ -42,6 +42,10 @@ public:
     /** Clears root + modal chains and removes the focus ring. @param logIfCleared if true, logs FORGE7 Focus: clearAllFocus. */
     void clearAllFocus(bool logIfCleared = true) noexcept;
 
+    /** Controls visual drawing only. Hardware navigation events still route through this component. */
+    void setFocusOverlayEnabled(bool shouldDraw) noexcept;
+    bool isFocusOverlayEnabled() const noexcept { return focusOverlayEnabled; }
+
     bool hasModalFocusChain() const noexcept { return modalActive; }
 
     /** Long-press encoder: close modal first, then optional app-level back (e.g. leave edit mode). */
@@ -72,6 +76,7 @@ private:
     std::vector<EncoderFocusItem> rootItems;
     std::vector<EncoderFocusItem> modalItems;
     bool modalActive = false;
+    bool focusOverlayEnabled = true;
 
     int focusIndex = 0;
 

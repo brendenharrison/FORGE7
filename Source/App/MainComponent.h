@@ -98,6 +98,7 @@ private:
     std::unique_ptr<TunerOverlayComponent> tunerOverlay;
 
     bool handleGlobalEncoderLongPress();
+    void restoreBaseFocus();
     void showProjectSceneJumpBrowser();
     void closeProjectSceneJumpBrowser();
 
