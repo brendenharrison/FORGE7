@@ -92,13 +92,16 @@ PluginEditorCanvas::PluginEditorCanvas()
     : clipForwarder(std::make_unique<detail::ClipPanMouseForwarder>(*this))
 {
     setOpaque(true);
+    setPaintingIsUnclipped(false);
 
     addAndMakeVisible(pluginContentClip);
     pluginContentClip.setInterceptsMouseClicks(true, true);
+    pluginContentClip.setPaintingIsUnclipped(false);
     pluginContentClip.addMouseListener(clipForwarder.get(), true);
 
     pluginContentClip.addAndMakeVisible(panBoard);
     panBoard.setInterceptsMouseClicks(true, true);
+    panBoard.setPaintingIsUnclipped(false);
 
     hudLabel.setFont(juce::Font(11.0f));
     hudLabel.setColour(juce::Label::textColourId, hudText());
@@ -210,6 +213,16 @@ juce::Rectangle<int> PluginEditorCanvas::getViewportBoundsForContent() const noe
         return {};
     r.removeFromBottom(kHudStripHeight);
     return r;
+}
+
+juce::Rectangle<int> PluginEditorCanvas::getHostedEditorBoundsInCanvas() const noexcept
+{
+    if (hostedEditor == nullptr)
+        return {};
+
+    const auto panInClip = panBoard.getBounds();
+    const auto clipInCanvas = pluginContentClip.getBounds();
+    return panInClip.withPosition(clipInCanvas.getX() + panInClip.getX(), clipInCanvas.getY() + panInClip.getY());
 }
 
 bool PluginEditorCanvas::hostedEditorIsResizable() const noexcept

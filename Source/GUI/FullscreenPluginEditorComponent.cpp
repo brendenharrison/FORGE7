@@ -15,6 +15,7 @@
 #include "../PluginHost/PluginSlot.h"
 #include "../Scene/Scene.h"
 #include "../Scene/SceneManager.h"
+#include "../Utilities/Logger.h"
 
 namespace forge7
 {
@@ -49,13 +50,23 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     : appContext(context)
     , slotIndex(pluginSlotIndex)
     , onClose(std::move(onCloseRequested))
+    , headerChromeBg(bg())
+    , viewControlsChromeBg(panel().brighter(0.05f))
+    , panControlsChromeBg(panel().brighter(0.05f))
+    , footerChromeBg(bg())
+    , parameterList({}, static_cast<juce::ListBoxModel*>(this))
 {
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
 
     setOpaque(true);
 
-    // Add first so the hosted VST/editor view stays behind all FORGE chrome (labels, mapping strip).
-    addAndMakeVisible(pluginEditorCanvas);
+    pluginViewportFrame.addAndMakeVisible(pluginEditorCanvas);
+    addAndMakeVisible(pluginViewportFrame);
+
+    addAndMakeVisible(headerChromeBg);
+    addAndMakeVisible(viewControlsChromeBg);
+    addAndMakeVisible(panControlsChromeBg);
+    addAndMakeVisible(footerChromeBg);
 
     backButton.onClick = [this]()
     {
@@ -104,6 +115,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
         assignHintLabel.setVisible(assignModeToggle.getToggleState());
         resized();
         syncEncoderFocus();
+        bringChromeToFront();
 
         if (appContext.parameterMappingManager != nullptr && !assignModeToggle.getToggleState())
             appContext.parameterMappingManager->cancelKnobAssignmentLearn();
@@ -149,6 +161,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
         // Legacy button kept for now; Fit H maps to Fit Width/Height-style resizing, but V1 focuses on Fit/Actual/Width.
         pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
         refreshPanControlsFromCanvas();
+        bringChromeToFront();
     };
     addAndMakeVisible(viewFitHeight);
 
@@ -158,6 +171,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     {
         pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitWidth);
         refreshPanControlsFromCanvas();
+        bringChromeToFront();
     };
     addAndMakeVisible(viewFitWidth);
 
@@ -167,6 +181,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     {
         pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
         refreshPanControlsFromCanvas();
+        bringChromeToFront();
     };
     addAndMakeVisible(viewFitAll);
 
@@ -176,6 +191,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     {
         pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::ActualSize);
         refreshPanControlsFromCanvas();
+        bringChromeToFront();
     };
     addAndMakeVisible(viewActual100);
 
@@ -196,6 +212,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
         pluginEditorCanvas.setPanMode(panModeToggle.getToggleState());
         syncEncoderFocus();
+        bringChromeToFront();
     };
     addAndMakeVisible(panModeToggle);
 
@@ -236,24 +253,12 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     };
     addAndMakeVisible(panYSlider);
 
-    juce::AudioPluginInstance* instance = nullptr;
-
     if (appContext.pluginHostManager != nullptr)
         if (auto* chain = appContext.pluginHostManager->getPluginChain())
             if (auto* slot = chain->getSlot(static_cast<size_t>(slotIndex)))
-                instance = slot->getHostedInstance();
+                hostedInstanceForEditor = slot->getHostedInstance();
 
-    if (instance != nullptr)
-    {
-        if (instance->hasEditor())
-            embeddedEditor.reset(instance->createEditorIfNeeded());
-
-        if (embeddedEditor == nullptr)
-            embeddedEditor = std::make_unique<juce::GenericAudioProcessorEditor>(*instance);
-    }
-
-    if (embeddedEditor != nullptr)
-        pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
+    tryAttachEmbeddedEditorIfNeeded();
 
     refreshPanControlsFromCanvas();
 
@@ -261,6 +266,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
     refreshMappingStrip();
     syncEncoderFocus();
+    bringChromeToFront();
     startTimerHz(8);
 }
 
@@ -323,7 +329,10 @@ void FullscreenPluginEditorComponent::resized()
 {
     auto area = getLocalBounds().reduced(10, 8);
 
-    auto top = area.removeFromTop(48);
+    const auto headerBand = area.removeFromTop(48);
+    headerChromeBg.setBounds(headerBand);
+
+    auto top = headerBand;
     backButton.setBounds(top.removeFromLeft(80).reduced(0, 4));
     top.removeFromLeft(8);
     assignModeToggle.setBounds(top.removeFromRight(142).reduced(0, 4));
@@ -343,7 +352,10 @@ void FullscreenPluginEditorComponent::resized()
     area.removeFromTop(8);
 
     {
-        auto viewRow = area.removeFromTop(34);
+        const auto viewBand = area.removeFromTop(34);
+        viewControlsChromeBg.setBounds(viewBand);
+
+        auto viewRow = viewBand;
         const int gap = 6;
         const int nBtns = 5;
         const int btnW = juce::jmax(56, (viewRow.getWidth() - gap * (nBtns - 1)) / nBtns);
@@ -361,9 +373,11 @@ void FullscreenPluginEditorComponent::resized()
 
     area.removeFromTop(6);
 
-    // Pan sliders: only meaningful when plugin is larger than viewport; canvas will enable/disable.
     {
-        auto panRow = area.removeFromTop(44);
+        const auto panBand = area.removeFromTop(44);
+        panControlsChromeBg.setBounds(panBand);
+
+        auto panRow = panBand;
         auto topLine = panRow.removeFromTop(18);
         const int labelW = 52;
         panXLabel.setBounds(topLine.removeFromLeft(labelW));
@@ -377,8 +391,10 @@ void FullscreenPluginEditorComponent::resized()
 
     area.removeFromTop(6);
 
-    auto bottom = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
+    const auto bottomBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
+    footerChromeBg.setBounds(bottomBand);
 
+    auto bottom = bottomBand;
     auto strip = bottom.removeFromBottom(72).reduced(0, 4);
     closeButton.setBounds(strip.removeFromRight(96).reduced(4, 4));
     strip.removeFromRight(6);
@@ -397,8 +413,112 @@ void FullscreenPluginEditorComponent::resized()
         parameterList.setBounds(bottom);
     }
 
-    pluginEditorCanvas.setBounds(area);
+    pluginViewportFrame.setBounds(area);
+    tryAttachEmbeddedEditorIfNeeded();
     refreshPanControlsFromCanvas();
+    logPluginEditorLayoutDiagnosticsIfChanged();
+    bringChromeToFront();
+}
+
+void FullscreenPluginEditorComponent::bringChromeToFront()
+{
+    pluginViewportFrame.toBack();
+
+    headerChromeBg.toFront(false);
+    viewControlsChromeBg.toFront(false);
+    panControlsChromeBg.toFront(false);
+    footerChromeBg.toFront(false);
+
+    backButton.toFront(false);
+    titleLabel.toFront(false);
+    sceneVarLabel.toFront(false);
+
+    if (cpuMeter != nullptr)
+        cpuMeter->toFront(false);
+
+    assignModeToggle.toFront(false);
+    viewFitAll.toFront(false);
+    viewActual100.toFront(false);
+    viewFitWidth.toFront(false);
+    panModeToggle.toFront(false);
+    viewFitHeight.toFront(false);
+    panXLabel.toFront(false);
+    panXSlider.toFront(false);
+    panYLabel.toFront(false);
+    panYSlider.toFront(false);
+    assignHintLabel.toFront(false);
+    parameterList.toFront(false);
+
+    for (auto& l : knobMappingLabels)
+        l.toFront(false);
+
+    for (auto& l : assignMappingLabels)
+        l.toFront(false);
+
+    closeButton.toFront(false);
+}
+
+void FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
+{
+    if (embeddedEditor != nullptr || hostedInstanceForEditor == nullptr)
+        return;
+
+    if (pluginViewportFrame.getWidth() < 12 || pluginViewportFrame.getHeight() < 12)
+        return;
+
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
+    if (hostedInstanceForEditor->hasEditor())
+        embeddedEditor.reset(hostedInstanceForEditor->createEditorIfNeeded());
+
+    if (embeddedEditor == nullptr)
+        embeddedEditor = std::make_unique<juce::GenericAudioProcessorEditor>(*hostedInstanceForEditor);
+
+    pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
+    refreshPanControlsFromCanvas();
+    logPluginEditorLayoutDiagnosticsIfChanged();
+    bringChromeToFront();
+}
+
+void FullscreenPluginEditorComponent::logPluginEditorLayoutDiagnosticsIfChanged()
+{
+    if (embeddedEditor == nullptr)
+        return;
+
+    const auto vp = pluginViewportFrame.getBounds();
+
+    if (vp == lastPluginLayoutDiagnosticBounds)
+        return;
+
+    lastPluginLayoutDiagnosticBounds = vp;
+
+    juce::String modeStr;
+
+    switch (pluginEditorCanvas.getViewMode())
+    {
+        case PluginEditorCanvas::PluginEditorViewMode::ActualSize:
+            modeStr = "Actual";
+            break;
+        case PluginEditorCanvas::PluginEditorViewMode::FitToScreen:
+            modeStr = "Fit";
+            break;
+        case PluginEditorCanvas::PluginEditorViewMode::FitWidth:
+            modeStr = "Width";
+            break;
+        default:
+            modeStr = "?";
+            break;
+    }
+
+    const auto editorInCanvas = pluginEditorCanvas.getHostedEditorBoundsInCanvas();
+
+    Logger::info("FORGE7 FullscreenPlugin: natural="
+                 + juce::String(pluginEditorCanvas.getNaturalEditorWidth()) + "x"
+                 + juce::String(pluginEditorCanvas.getNaturalEditorHeight()) + " viewportFrame=" + vp.toString()
+                 + " canvas=" + pluginEditorCanvas.getBounds().toString() + " editorInCanvas=" + editorInCanvas.toString()
+                 + " viewMode=" + modeStr + " pan=(" + juce::String(pluginEditorCanvas.getPanX(), 1) + ","
+                 + juce::String(pluginEditorCanvas.getPanY(), 1) + ")"
+                 + " panMode=" + juce::String(pluginEditorCanvas.getPanMode() ? "1" : "0"));
 }
 
 void FullscreenPluginEditorComponent::refreshPanControlsFromCanvas()

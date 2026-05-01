@@ -43,6 +43,7 @@ set(FORGE7_SOURCES
     GUI/NameEntryModal.cpp
     GUI/NavigationStatus.cpp
     GUI/FullscreenPluginEditorComponent.cpp
+    GUI/PluginEditorViewportFrame.cpp
     GUI/PluginEditorCanvas.cpp
     GUI/RackSlotCard.cpp
     GUI/PerformanceViewComponent.cpp

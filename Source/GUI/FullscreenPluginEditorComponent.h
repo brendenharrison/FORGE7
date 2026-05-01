@@ -8,10 +8,12 @@
 #include "../Controls/ParameterMappingDescriptor.h"
 
 #include "PluginEditorCanvas.h"
+#include "PluginEditorViewportFrame.h"
 
 namespace juce
 {
 class AudioProcessorEditor;
+class AudioPluginInstance;
 }
 
 namespace forge7
@@ -27,8 +29,8 @@ class CpuMeter;
     Assignment Mode: pick a parameter from the list, then twist K1-K4 - `ParameterMappingManager`
     binds on first knob delta (see `prepareKnobAssignmentToNextHardwareMove`).
 
-    Plugin UI is hosted inside `PluginEditorCanvas` so oversized VST editors scale/pan within the
-    central area without overlapping FORGE chrome. */
+    Plugin UI is hosted inside `PluginEditorCanvas` inside `PluginEditorViewportFrame` so oversized
+    / native editors stay clipped to the central viewport and do not overlap FORGE chrome. */
 class FullscreenPluginEditorComponent final : public juce::Component,
                                                private juce::Timer,
                                                private juce::ListBoxModel
@@ -65,6 +67,10 @@ private:
     void rebuildParameterListModel();
     void refreshMappingStrip();
 
+    void bringChromeToFront();
+    void tryAttachEmbeddedEditorIfNeeded();
+    void logPluginEditorLayoutDiagnosticsIfChanged();
+
     AppContext& appContext;
     const int slotIndex;
 
@@ -90,10 +96,21 @@ private:
 
     /** Owned first so destruction clears canvas -> releases hosted editor before unique_ptr resets. */
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;
+
+    juce::AudioPluginInstance* hostedInstanceForEditor = nullptr;
+
+    PluginEditorViewportFrame pluginViewportFrame;
     PluginEditorCanvas pluginEditorCanvas;
 
+    ChromeBackgroundBand headerChromeBg;
+    ChromeBackgroundBand viewControlsChromeBg;
+    ChromeBackgroundBand panControlsChromeBg;
+    ChromeBackgroundBand footerChromeBg;
+
+    juce::Rectangle<int> lastPluginLayoutDiagnosticBounds;
+
     juce::Label assignHintLabel;
-    juce::ListBox parameterList { {}, this };
+    juce::ListBox parameterList;
 
     std::array<juce::Label, 4> knobMappingLabels {};
     std::array<juce::Label, 2> assignMappingLabels {};

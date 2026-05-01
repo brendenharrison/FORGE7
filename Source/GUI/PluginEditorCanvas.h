@@ -87,6 +87,9 @@ public:
 
     juce::Rectangle<int> getViewportBoundsForContent() const noexcept;
 
+    /** Bounds of the panned editor surface in canvas coordinates (empty if no editor). */
+    juce::Rectangle<int> getHostedEditorBoundsInCanvas() const noexcept;
+
     void applyLayout();
 
     juce::String getViewHudLine() const;
