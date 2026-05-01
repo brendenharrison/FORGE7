@@ -44,6 +44,15 @@ juce::String mappingLabelForKnob(const juce::Array<ParameterMappingDescriptor>& 
 }
 } // namespace
 
+struct FullscreenPluginEditorComponent::DeferredEditorHostReconciler final : juce::AsyncUpdater
+{
+    explicit DeferredEditorHostReconciler(FullscreenPluginEditorComponent& o) noexcept : owner(o) {}
+
+    void handleAsyncUpdate() override { owner.performDeferredEditorHostReconcile(); }
+
+    FullscreenPluginEditorComponent& owner;
+};
+
 FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& context,
                                                                   const int pluginSlotIndex,
                                                                   std::function<void()> onCloseRequested)
@@ -60,8 +69,10 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
 
     setOpaque(true);
 
-    pluginViewportFrame.addAndMakeVisible(pluginEditorCanvas);
+    deferredEditorHostReconciler = std::make_unique<DeferredEditorHostReconciler>(*this);
+
     addAndMakeVisible(pluginViewportFrame);
+    pluginViewportFrame.addAndMakeVisible(pluginEditorCanvas);
 
     addAndMakeVisible(headerChromeBg);
     addAndMakeVisible(viewControlsChromeBg);
@@ -258,8 +269,6 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
             if (auto* slot = chain->getSlot(static_cast<size_t>(slotIndex)))
                 hostedInstanceForEditor = slot->getHostedInstance();
 
-    tryAttachEmbeddedEditorIfNeeded();
-
     refreshPanControlsFromCanvas();
 
     rebuildParameterListModel();
@@ -267,12 +276,18 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     refreshMappingStrip();
     syncEncoderFocus();
     bringChromeToFront();
+    scheduleDeferredEditorHostReconcile();
     startTimerHz(8);
 }
 
 FullscreenPluginEditorComponent::~FullscreenPluginEditorComponent()
 {
     stopTimer();
+
+    if (deferredEditorHostReconciler != nullptr)
+        deferredEditorHostReconciler->cancelPendingUpdate();
+
+    deferredEditorHostReconciler.reset();
 
     if (appContext.parameterMappingManager != nullptr)
         appContext.parameterMappingManager->cancelKnobAssignmentLearn();
@@ -414,9 +429,10 @@ void FullscreenPluginEditorComponent::resized()
     }
 
     pluginViewportFrame.setBounds(area);
-    tryAttachEmbeddedEditorIfNeeded();
+    pluginEditorCanvas.setBounds(pluginViewportFrame.getLocalBounds());
+
+    scheduleDeferredEditorHostReconcile();
     refreshPanControlsFromCanvas();
-    logPluginEditorLayoutDiagnosticsIfChanged();
     bringChromeToFront();
 }
 
@@ -458,13 +474,30 @@ void FullscreenPluginEditorComponent::bringChromeToFront()
     closeButton.toFront(false);
 }
 
-void FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
+void FullscreenPluginEditorComponent::scheduleDeferredEditorHostReconcile()
+{
+    if (deferredEditorHostReconciler != nullptr)
+        deferredEditorHostReconciler->triggerAsyncUpdate();
+}
+
+void FullscreenPluginEditorComponent::performDeferredEditorHostReconcile()
+{
+    const bool attachedNow = tryAttachEmbeddedEditorIfNeeded();
+
+    if (attachedNow)
+        pluginEditorCanvas.reattachHostedEditorIfPresent();
+
+    logPluginEditorLayoutDiagnosticsIfChanged();
+    bringChromeToFront();
+}
+
+bool FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
 {
     if (embeddedEditor != nullptr || hostedInstanceForEditor == nullptr)
-        return;
+        return false;
 
     if (pluginViewportFrame.getWidth() < 12 || pluginViewportFrame.getHeight() < 12)
-        return;
+        return false;
 
     jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
 
@@ -476,8 +509,7 @@ void FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
 
     pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
     refreshPanControlsFromCanvas();
-    logPluginEditorLayoutDiagnosticsIfChanged();
-    bringChromeToFront();
+    return true;
 }
 
 void FullscreenPluginEditorComponent::logPluginEditorLayoutDiagnosticsIfChanged()
@@ -512,13 +544,14 @@ void FullscreenPluginEditorComponent::logPluginEditorLayoutDiagnosticsIfChanged(
 
     const auto editorInCanvas = pluginEditorCanvas.getHostedEditorBoundsInCanvas();
 
-    Logger::info("FORGE7 FullscreenPlugin: natural="
+    Logger::info("FORGE7 FullscreenPlugin: fullscreen=" + getBounds().toString() + " natural="
                  + juce::String(pluginEditorCanvas.getNaturalEditorWidth()) + "x"
                  + juce::String(pluginEditorCanvas.getNaturalEditorHeight()) + " viewportFrame=" + vp.toString()
                  + " canvas=" + pluginEditorCanvas.getBounds().toString() + " editorInCanvas=" + editorInCanvas.toString()
                  + " viewMode=" + modeStr + " pan=(" + juce::String(pluginEditorCanvas.getPanX(), 1) + ","
                  + juce::String(pluginEditorCanvas.getPanY(), 1) + ")"
-                 + " panMode=" + juce::String(pluginEditorCanvas.getPanMode() ? "1" : "0"));
+                 + " panMode=" + juce::String(pluginEditorCanvas.getPanMode() ? "1" : "0") + " "
+                 + pluginEditorCanvas.describeHostedEditorLayoutForDiagnostics());
 }
 
 void FullscreenPluginEditorComponent::refreshPanControlsFromCanvas()

@@ -90,6 +90,12 @@ public:
     /** Bounds of the panned editor surface in canvas coordinates (empty if no editor). */
     juce::Rectangle<int> getHostedEditorBoundsInCanvas() const noexcept;
 
+    /** Detach and re-add the hosted editor to `panBoard` after viewport layout (helps some native peers). */
+    void reattachHostedEditorIfPresent();
+
+    /** Clip / panBoard / editor bounds and parent chain for logging. */
+    juce::String describeHostedEditorLayoutForDiagnostics() const;
+
     void applyLayout();
 
     juce::String getViewHudLine() const;

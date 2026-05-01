@@ -2,6 +2,8 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <typeinfo>
+
 namespace forge7
 {
 namespace
@@ -223,6 +225,35 @@ juce::Rectangle<int> PluginEditorCanvas::getHostedEditorBoundsInCanvas() const n
     const auto panInClip = panBoard.getBounds();
     const auto clipInCanvas = pluginContentClip.getBounds();
     return panInClip.withPosition(clipInCanvas.getX() + panInClip.getX(), clipInCanvas.getY() + panInClip.getY());
+}
+
+void PluginEditorCanvas::reattachHostedEditorIfPresent()
+{
+    if (hostedEditor == nullptr)
+        return;
+
+    juce::AudioProcessorEditor* ed = hostedEditor;
+    clearHostedEditor();
+    setHostedEditor(ed);
+}
+
+juce::String PluginEditorCanvas::describeHostedEditorLayoutForDiagnostics() const
+{
+    if (hostedEditor == nullptr)
+        return "hostedEditor=null";
+
+    juce::String chain;
+
+    for (const juce::Component* p = hostedEditor; p != nullptr; p = p->getParentComponent())
+    {
+        if (!chain.isEmpty())
+            chain << " | ";
+
+        chain << "[" << juce::String(typeid(*p).name()) << " bounds=" << p->getBounds().toString() << "]";
+    }
+
+    return juce::String("pluginContentClip=") + pluginContentClip.getBounds().toString() + " panBoard(relClip)="
+           + panBoard.getBounds().toString() + " hostedLocal=" + hostedEditor->getBounds().toString() + " chain=" + chain;
 }
 
 bool PluginEditorCanvas::hostedEditorIsResizable() const noexcept

@@ -68,8 +68,14 @@ private:
     void refreshMappingStrip();
 
     void bringChromeToFront();
-    void tryAttachEmbeddedEditorIfNeeded();
+    /** @return true if an editor was created and attached in this call. */
+    bool tryAttachEmbeddedEditorIfNeeded();
     void logPluginEditorLayoutDiagnosticsIfChanged();
+    void scheduleDeferredEditorHostReconcile();
+    void performDeferredEditorHostReconcile();
+
+    struct DeferredEditorHostReconciler;
+    std::unique_ptr<DeferredEditorHostReconciler> deferredEditorHostReconciler;
 
     AppContext& appContext;
     const int slotIndex;
