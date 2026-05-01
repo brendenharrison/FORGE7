@@ -73,6 +73,7 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     pluginViewportFrame.addAndMakeVisible(pluginEditorCanvas);
 
     // V1 default: ActualSize. Vendor GUI keeps its natural size; oversized editors are reachable via scrollbars.
+    pluginEditorCanvas.setPanMode(false);
     pluginEditorCanvas.resetPluginViewToActualSize();
 
     addAndMakeVisible(headerChromeBg);
@@ -173,9 +174,11 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     panYSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     panYSlider.setRange(0.0, 1.0, 0.0);
     panYSlider.setEnabled(false);
+    // JUCE vertical linear: smaller value nearer bottom of track. Map so bottom = scrollY 1 (browser-like).
     panYSlider.onValueChange = [this]()
     {
-        pluginEditorCanvas.setScrollY01(static_cast<float>(panYSlider.getValue()));
+        const float v = static_cast<float>(panYSlider.getValue());
+        pluginEditorCanvas.setScrollY01(1.0f - v);
     };
     addAndMakeVisible(panYSlider);
 
@@ -282,7 +285,7 @@ void FullscreenPluginEditorComponent::resized()
     area.removeFromTop(6);
 
     // Footer (assign mode expands it; assign list/hint live inside this band, never overlapping the workspace).
-    const auto footerBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 112);
+    const auto footerBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
     footerChromeBg.setBounds(footerBand);
 
     auto footer = footerBand;
@@ -304,20 +307,18 @@ void FullscreenPluginEditorComponent::resized()
         parameterList.setBounds(footer);
     }
 
-    // Horizontal scrollbar sits directly above the footer, visually attached to the workspace.
-    constexpr int kScrollbarThickness = 18;
-    const auto horizontalScrollbarBand = area.removeFromBottom(kScrollbarThickness);
+    // Horizontal scrollbar directly above the footer; vertical along the right of the workspace.
+    constexpr int kScrollbarThickness = 20;
+    const auto hScrollBand = area.removeFromBottom(kScrollbarThickness);
+    panXSlider.setBounds(hScrollBand);
 
-    // Vertical scrollbar runs the full height of the remaining workspace on its right edge.
-    const auto verticalScrollbarBand = area.removeFromRight(kScrollbarThickness);
+    auto pluginWorkspace = area;
+    const auto vScrollBand = pluginWorkspace.removeFromRight(kScrollbarThickness);
+    panYSlider.setBounds(vScrollBand);
 
-    // Whatever remains is the dedicated vendor GUI workspace. By geometric construction it
-    // cannot overlap header, footer, or either scrollbar.
-    pluginViewportFrame.setBounds(area);
+    // Remaining region is the vendor GUI only; no overlap with header, scrollbars, or footer.
+    pluginViewportFrame.setBounds(pluginWorkspace);
     pluginEditorCanvas.setBounds(pluginViewportFrame.getLocalBounds());
-
-    panXSlider.setBounds(horizontalScrollbarBand);
-    panYSlider.setBounds(verticalScrollbarBand);
 
     scheduleDeferredEditorHostReconcile();
     refreshPanControlsFromCanvas();
@@ -453,7 +454,7 @@ void FullscreenPluginEditorComponent::refreshPanControlsFromCanvas()
     panYSlider.setEnabled(canY);
 
     panXSlider.setValue(pluginEditorCanvas.getScrollX01(), juce::dontSendNotification);
-    panYSlider.setValue(pluginEditorCanvas.getScrollY01(), juce::dontSendNotification);
+    panYSlider.setValue(1.0 - static_cast<double>(pluginEditorCanvas.getScrollY01()), juce::dontSendNotification);
 }
 
 void FullscreenPluginEditorComponent::rebuildParameterListModel()
@@ -613,7 +614,7 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
                           [this](const int d)
                           {
                               const double step = 0.05 * (d > 0 ? 1.0 : -1.0);
-                              panYSlider.setValue(juce::jlimit(0.0, 1.0, panYSlider.getValue() + step),
+                              panYSlider.setValue(juce::jlimit(0.0, 1.0, panYSlider.getValue() - step),
                                                   juce::sendNotificationSync);
                           } });
     }

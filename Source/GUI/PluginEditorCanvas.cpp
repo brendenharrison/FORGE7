@@ -380,7 +380,7 @@ float PluginEditorCanvas::getScrollX01() const noexcept
 
     const float span = maxX - minX;
     if (std::abs(span) < 0.5f)
-        return 0.0f;
+        return 0.5f;
 
     // scroll 0 = panX at maxX (left edge visible); scroll 1 = panX at minX (right edge visible).
     return juce::jlimit(0.0f, 1.0f, (maxX - panX) / span);
@@ -393,7 +393,7 @@ float PluginEditorCanvas::getScrollY01() const noexcept
 
     const float span = maxY - minY;
     if (std::abs(span) < 0.5f)
-        return 0.0f;
+        return 0.5f;
 
     return juce::jlimit(0.0f, 1.0f, (maxY - panY) / span);
 }
