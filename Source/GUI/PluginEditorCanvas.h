@@ -58,6 +58,10 @@ public:
     void setViewMode(PluginEditorViewMode mode);
     PluginEditorViewMode getViewMode() const noexcept { return viewMode; }
 
+    /** Reset to ActualSize (the V1 default for fixed-size vendor GUIs); centers small editors,
+        positions oversized editors at the top-left so scrollbars start at 0/0 like a web page. */
+    void resetPluginViewToActualSize();
+
     void panBy(float deltaX, float deltaY);
     void setPanPosition(float x, float y);
 
@@ -73,6 +77,16 @@ public:
     bool canPanHorizontally() const noexcept;
     bool canPanVertically() const noexcept;
 
+    /** Browser-like scroll wrappers. Scroll 0 = leftmost/topmost content, 1 = rightmost/bottommost. */
+    bool canScrollX() const noexcept { return canPanHorizontally(); }
+    bool canScrollY() const noexcept { return canPanVertically(); }
+
+    float getScrollX01() const noexcept;
+    float getScrollY01() const noexcept;
+
+    void setScrollX01(float x);
+    void setScrollY01(float y);
+
     void setPanMode(bool enabled);
     bool getPanMode() const noexcept { return panMode; }
 
@@ -85,10 +99,13 @@ public:
     int getCurrentEditorWidth() const noexcept { return currentW; }
     int getCurrentEditorHeight() const noexcept { return currentH; }
 
-    juce::Rectangle<int> getViewportBoundsForContent() const noexcept;
+    juce::Rectangle<int> getViewportBoundsForContent() const noexcept { return getLocalBounds(); }
 
     /** Bounds of the panned editor surface in canvas coordinates (empty if no editor). */
     juce::Rectangle<int> getHostedEditorBoundsInCanvas() const noexcept;
+
+    /** True when the hosted editor is fixed-size and larger than the viewport (likely a native subview that may not clip). */
+    bool hostedEditorMayExceedClipping() const noexcept;
 
     /** Detach and re-add the hosted editor to `panBoard` after viewport layout (helps some native peers). */
     void reattachHostedEditorIfPresent();
@@ -97,8 +114,6 @@ public:
     juce::String describeHostedEditorLayoutForDiagnostics() const;
 
     void applyLayout();
-
-    juce::String getViewHudLine() const;
 
     void paint(juce::Graphics& g) override;
     void resized() override;
@@ -119,8 +134,6 @@ private:
     void layoutPanBoardAndEditor();
     void updatePanInterceptLayer();
 
-    int viewportWidth() const noexcept;
-    int viewportHeight() const noexcept;
     bool hostedEditorIsResizable() const noexcept;
 
     juce::AudioProcessorEditor* hostedEditor = nullptr;
@@ -137,7 +150,7 @@ private:
     int currentW { 800 };
     int currentH { 500 };
 
-    PluginEditorViewMode viewMode { PluginEditorViewMode::FitToScreen };
+    PluginEditorViewMode viewMode { PluginEditorViewMode::ActualSize };
 
     float panX { 0.0f };
     float panY { 0.0f };
@@ -148,11 +161,6 @@ private:
 
     bool draggingPan { false };
     juce::Point<float> lastDragPos {};
-
-    juce::Label hudLabel;
-    juce::Label panHintLabel;
-
-    static constexpr int kHudStripHeight = 22;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(PluginEditorCanvas)
 };

@@ -60,8 +60,6 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     , slotIndex(pluginSlotIndex)
     , onClose(std::move(onCloseRequested))
     , headerChromeBg(bg())
-    , viewControlsChromeBg(panel().brighter(0.05f))
-    , panControlsChromeBg(panel().brighter(0.05f))
     , footerChromeBg(bg())
     , parameterList({}, static_cast<juce::ListBoxModel*>(this))
 {
@@ -74,9 +72,10 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     addAndMakeVisible(pluginViewportFrame);
     pluginViewportFrame.addAndMakeVisible(pluginEditorCanvas);
 
+    // V1 default: ActualSize. Vendor GUI keeps its natural size; oversized editors are reachable via scrollbars.
+    pluginEditorCanvas.resetPluginViewToActualSize();
+
     addAndMakeVisible(headerChromeBg);
-    addAndMakeVisible(viewControlsChromeBg);
-    addAndMakeVisible(panControlsChromeBg);
     addAndMakeVisible(footerChromeBg);
 
     backButton.onClick = [this]()
@@ -115,13 +114,6 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     assignModeToggle.setColour(juce::ToggleButton::tickColourId, accent());
     assignModeToggle.onClick = [this]()
     {
-        // Assignment requires plugin controls to receive touch/click; Pan Mode would swallow drags.
-        if (assignModeToggle.getToggleState())
-        {
-            panModeToggle.setToggleState(false, juce::dontSendNotification);
-            pluginEditorCanvas.setPanMode(false);
-        }
-
         parameterList.setVisible(assignModeToggle.getToggleState());
         assignHintLabel.setVisible(assignModeToggle.getToggleState());
         resized();
@@ -165,102 +157,25 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
         addAndMakeVisible(assignMappingLabels[i]);
     }
 
-    viewFitHeight.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
-    viewFitHeight.setColour(juce::TextButton::textColourOffId, text());
-    viewFitHeight.onClick = [this]()
-    {
-        // Legacy button kept for now; Fit H maps to Fit Width/Height-style resizing, but V1 focuses on Fit/Actual/Width.
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
-        refreshPanControlsFromCanvas();
-        bringChromeToFront();
-    };
-    addAndMakeVisible(viewFitHeight);
-
-    viewFitWidth.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
-    viewFitWidth.setColour(juce::TextButton::textColourOffId, text());
-    viewFitWidth.onClick = [this]()
-    {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitWidth);
-        refreshPanControlsFromCanvas();
-        bringChromeToFront();
-    };
-    addAndMakeVisible(viewFitWidth);
-
-    viewFitAll.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
-    viewFitAll.setColour(juce::TextButton::textColourOffId, text());
-    viewFitAll.onClick = [this]()
-    {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::FitToScreen);
-        refreshPanControlsFromCanvas();
-        bringChromeToFront();
-    };
-    addAndMakeVisible(viewFitAll);
-
-    viewActual100.setColour(juce::TextButton::buttonColourId, panel().brighter(0.08f));
-    viewActual100.setColour(juce::TextButton::textColourOffId, text());
-    viewActual100.onClick = [this]()
-    {
-        pluginEditorCanvas.setViewMode(PluginEditorCanvas::PluginEditorViewMode::ActualSize);
-        refreshPanControlsFromCanvas();
-        bringChromeToFront();
-    };
-    addAndMakeVisible(viewActual100);
-
-    panModeToggle.setColour(juce::ToggleButton::textColourId, text());
-    panModeToggle.setColour(juce::ToggleButton::tickColourId, accent());
-    panModeToggle.onClick = [this]()
-    {
-        // If Pan Mode is enabled, we disable Assign so drags are unambiguous.
-        if (panModeToggle.getToggleState() && assignModeToggle.getToggleState())
-        {
-            assignModeToggle.setToggleState(false, juce::dontSendNotification);
-            parameterList.setVisible(false);
-            assignHintLabel.setVisible(false);
-
-            if (appContext.parameterMappingManager != nullptr)
-                appContext.parameterMappingManager->cancelKnobAssignmentLearn();
-        }
-
-        pluginEditorCanvas.setPanMode(panModeToggle.getToggleState());
-        syncEncoderFocus();
-        bringChromeToFront();
-    };
-    addAndMakeVisible(panModeToggle);
-
-    auto stylePanLabel = [](juce::Label& l)
-    {
-        l.setFont(juce::Font(11.0f));
-        l.setColour(juce::Label::textColourId, muted());
-        l.setJustificationType(juce::Justification::centredLeft);
-    };
-
-    stylePanLabel(panXLabel);
-    panXLabel.setText("X Pan", juce::dontSendNotification);
-    addAndMakeVisible(panXLabel);
-
-    stylePanLabel(panYLabel);
-    panYLabel.setText("Y Pan", juce::dontSendNotification);
-    addAndMakeVisible(panYLabel);
-
-    auto stylePanSlider = [](juce::Slider& s)
-    {
-        s.setSliderStyle(juce::Slider::LinearHorizontal);
-        s.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-        s.setRange(0.0, 1.0, 0.0);
-        s.setEnabled(false);
-    };
-
-    stylePanSlider(panXSlider);
+    // Scrollbar-style sliders: compact, no text box, no labels. 0..1 normalized scroll position
+    // (0 = leftmost/topmost, 1 = rightmost/bottommost) - feels like a web browser scrollbar.
+    panXSlider.setSliderStyle(juce::Slider::LinearHorizontal);
+    panXSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    panXSlider.setRange(0.0, 1.0, 0.0);
+    panXSlider.setEnabled(false);
     panXSlider.onValueChange = [this]()
     {
-        pluginEditorCanvas.setPanPosition(static_cast<float>(panXSlider.getValue()), pluginEditorCanvas.getPanY());
+        pluginEditorCanvas.setScrollX01(static_cast<float>(panXSlider.getValue()));
     };
     addAndMakeVisible(panXSlider);
 
-    stylePanSlider(panYSlider);
+    panYSlider.setSliderStyle(juce::Slider::LinearVertical);
+    panYSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
+    panYSlider.setRange(0.0, 1.0, 0.0);
+    panYSlider.setEnabled(false);
     panYSlider.onValueChange = [this]()
     {
-        pluginEditorCanvas.setPanPosition(pluginEditorCanvas.getPanX(), static_cast<float>(panYSlider.getValue()));
+        pluginEditorCanvas.setScrollY01(static_cast<float>(panYSlider.getValue()));
     };
     addAndMakeVisible(panYSlider);
 
@@ -364,53 +279,14 @@ void FullscreenPluginEditorComponent::resized()
     top.removeFromRight(8);
     titleLabel.setBounds(top);
 
-    area.removeFromTop(8);
-
-    {
-        const auto viewBand = area.removeFromTop(34);
-        viewControlsChromeBg.setBounds(viewBand);
-
-        auto viewRow = viewBand;
-        const int gap = 6;
-        const int nBtns = 5;
-        const int btnW = juce::jmax(56, (viewRow.getWidth() - gap * (nBtns - 1)) / nBtns);
-
-        viewFitAll.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
-        viewActual100.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
-        viewFitWidth.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
-        panModeToggle.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-        viewRow.removeFromLeft(gap);
-        viewFitHeight.setBounds(viewRow.removeFromLeft(btnW).reduced(0, 2));
-    }
-
     area.removeFromTop(6);
 
-    {
-        const auto panBand = area.removeFromTop(44);
-        panControlsChromeBg.setBounds(panBand);
+    // Footer (assign mode expands it; assign list/hint live inside this band, never overlapping the workspace).
+    const auto footerBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 112);
+    footerChromeBg.setBounds(footerBand);
 
-        auto panRow = panBand;
-        auto topLine = panRow.removeFromTop(18);
-        const int labelW = 52;
-        panXLabel.setBounds(topLine.removeFromLeft(labelW));
-        panXSlider.setBounds(topLine);
-
-        panRow.removeFromTop(4);
-        auto bottomLine = panRow.removeFromTop(18);
-        panYLabel.setBounds(bottomLine.removeFromLeft(labelW));
-        panYSlider.setBounds(bottomLine);
-    }
-
-    area.removeFromTop(6);
-
-    const auto bottomBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
-    footerChromeBg.setBounds(bottomBand);
-
-    auto bottom = bottomBand;
-    auto strip = bottom.removeFromBottom(72).reduced(0, 4);
+    auto footer = footerBand;
+    auto strip = footer.removeFromBottom(72).reduced(0, 4);
     closeButton.setBounds(strip.removeFromRight(96).reduced(4, 4));
     strip.removeFromRight(6);
 
@@ -424,12 +300,24 @@ void FullscreenPluginEditorComponent::resized()
 
     if (assignModeToggle.getToggleState())
     {
-        assignHintLabel.setBounds(bottom.removeFromTop(22));
-        parameterList.setBounds(bottom);
+        assignHintLabel.setBounds(footer.removeFromTop(22));
+        parameterList.setBounds(footer);
     }
 
+    // Horizontal scrollbar sits directly above the footer, visually attached to the workspace.
+    constexpr int kScrollbarThickness = 18;
+    const auto horizontalScrollbarBand = area.removeFromBottom(kScrollbarThickness);
+
+    // Vertical scrollbar runs the full height of the remaining workspace on its right edge.
+    const auto verticalScrollbarBand = area.removeFromRight(kScrollbarThickness);
+
+    // Whatever remains is the dedicated vendor GUI workspace. By geometric construction it
+    // cannot overlap header, footer, or either scrollbar.
     pluginViewportFrame.setBounds(area);
     pluginEditorCanvas.setBounds(pluginViewportFrame.getLocalBounds());
+
+    panXSlider.setBounds(horizontalScrollbarBand);
+    panYSlider.setBounds(verticalScrollbarBand);
 
     scheduleDeferredEditorHostReconcile();
     refreshPanControlsFromCanvas();
@@ -441,8 +329,6 @@ void FullscreenPluginEditorComponent::bringChromeToFront()
     pluginViewportFrame.toBack();
 
     headerChromeBg.toFront(false);
-    viewControlsChromeBg.toFront(false);
-    panControlsChromeBg.toFront(false);
     footerChromeBg.toFront(false);
 
     backButton.toFront(false);
@@ -453,14 +339,7 @@ void FullscreenPluginEditorComponent::bringChromeToFront()
         cpuMeter->toFront(false);
 
     assignModeToggle.toFront(false);
-    viewFitAll.toFront(false);
-    viewActual100.toFront(false);
-    viewFitWidth.toFront(false);
-    panModeToggle.toFront(false);
-    viewFitHeight.toFront(false);
-    panXLabel.toFront(false);
     panXSlider.toFront(false);
-    panYLabel.toFront(false);
     panYSlider.toFront(false);
     assignHintLabel.toFront(false);
     parameterList.toFront(false);
@@ -550,28 +429,31 @@ void FullscreenPluginEditorComponent::logPluginEditorLayoutDiagnosticsIfChanged(
                  + " canvas=" + pluginEditorCanvas.getBounds().toString() + " editorInCanvas=" + editorInCanvas.toString()
                  + " viewMode=" + modeStr + " pan=(" + juce::String(pluginEditorCanvas.getPanX(), 1) + ","
                  + juce::String(pluginEditorCanvas.getPanY(), 1) + ")"
-                 + " panMode=" + juce::String(pluginEditorCanvas.getPanMode() ? "1" : "0") + " "
+                 + " "
                  + pluginEditorCanvas.describeHostedEditorLayoutForDiagnostics());
+
+    // Heads-up for the macOS/Windows native cases where a hosted child window may draw outside
+    // pluginViewportFrame regardless of JUCE clipping. Layout above guarantees the frame itself
+    // never overlaps chrome; the warning helps explain residual visual artifacts to maintainers.
+    if (pluginEditorCanvas.hostedEditorMayExceedClipping())
+        Logger::info("FORGE7 FullscreenPlugin: Vendor GUI appears to use native drawing that may not obey JUCE clipping.");
 }
 
 void FullscreenPluginEditorComponent::refreshPanControlsFromCanvas()
 {
-    float minX = 0.0f, maxX = 0.0f;
-    float minY = 0.0f, maxY = 0.0f;
-    pluginEditorCanvas.getPanRangeX(minX, maxX);
-    pluginEditorCanvas.getPanRangeY(minY, maxY);
+    const bool canX = pluginEditorCanvas.canScrollX();
+    const bool canY = pluginEditorCanvas.canScrollY();
 
-    const bool panXEnabled = std::abs(maxX - minX) > 0.5f;
-    const bool panYEnabled = std::abs(maxY - minY) > 0.5f;
+    // Hide scrollbars when content fits, like a browser. Layout still reserves the band so the
+    // workspace size doesn't jitter as scrollbars come and go during pan/resize operations.
+    panXSlider.setVisible(canX);
+    panYSlider.setVisible(canY);
 
-    panXSlider.setEnabled(panXEnabled);
-    panYSlider.setEnabled(panYEnabled);
+    panXSlider.setEnabled(canX);
+    panYSlider.setEnabled(canY);
 
-    panXSlider.setRange(minX, maxX, 0.0);
-    panYSlider.setRange(minY, maxY, 0.0);
-
-    panXSlider.setValue(pluginEditorCanvas.getPanX(), juce::dontSendNotification);
-    panYSlider.setValue(pluginEditorCanvas.getPanY(), juce::dontSendNotification);
+    panXSlider.setValue(pluginEditorCanvas.getScrollX01(), juce::dontSendNotification);
+    panYSlider.setValue(pluginEditorCanvas.getScrollY01(), juce::dontSendNotification);
 }
 
 void FullscreenPluginEditorComponent::rebuildParameterListModel()
@@ -711,30 +593,7 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
     items.push_back({ &backButton, [this]() { backButton.triggerClick(); }, {} });
     items.push_back({ &assignModeToggle, [this]() { assignModeToggle.triggerClick(); }, {} });
 
-    items.push_back({ &viewFitAll, [this]() { viewFitAll.triggerClick(); }, {} });
-    items.push_back({ &viewActual100, [this]() { viewActual100.triggerClick(); }, {} });
-    items.push_back({ &viewFitWidth, [this]() { viewFitWidth.triggerClick(); }, {} });
-    items.push_back({ &panModeToggle, [this]() { panModeToggle.triggerClick(); }, {} });
-
-    items.push_back({ &panXSlider,
-                      []() {},
-                      [this](const int d)
-                      {
-                          const double step = 40.0 * (d > 0 ? 1.0 : -1.0);
-                          panXSlider.setValue(panXSlider.getValue() + step, juce::sendNotificationSync);
-                      } });
-
-    items.push_back({ &panYSlider,
-                      []() {},
-                      [this](const int d)
-                      {
-                          const double step = 40.0 * (d > 0 ? 1.0 : -1.0);
-                          panYSlider.setValue(panYSlider.getValue() + step, juce::sendNotificationSync);
-                      } });
-
-    items.push_back({ &viewFitHeight, [this]() { viewFitHeight.triggerClick(); }, {} });
-
-    /** Encoder rotate pans the plugin canvas when zoomed; encoder press toggles horizontal vs vertical pan axis. */
+    // Plugin workspace: encoder press toggles primary pan axis; rotate pans + syncs scrollbars.
     items.push_back({ &pluginEditorCanvas,
                       [this]()
                       {
@@ -745,6 +604,31 @@ void FullscreenPluginEditorComponent::syncEncoderFocus()
                           pluginEditorCanvas.panWithEncoderDetents(d);
                           refreshPanControlsFromCanvas();
                       } });
+
+    // Vertical scrollbar - normalized 0..1; small step matches a comfortable detent feel.
+    if (pluginEditorCanvas.canScrollY())
+    {
+        items.push_back({ &panYSlider,
+                          []() {},
+                          [this](const int d)
+                          {
+                              const double step = 0.05 * (d > 0 ? 1.0 : -1.0);
+                              panYSlider.setValue(juce::jlimit(0.0, 1.0, panYSlider.getValue() + step),
+                                                  juce::sendNotificationSync);
+                          } });
+    }
+
+    if (pluginEditorCanvas.canScrollX())
+    {
+        items.push_back({ &panXSlider,
+                          []() {},
+                          [this](const int d)
+                          {
+                              const double step = 0.05 * (d > 0 ? 1.0 : -1.0);
+                              panXSlider.setValue(juce::jlimit(0.0, 1.0, panXSlider.getValue() + step),
+                                                  juce::sendNotificationSync);
+                          } });
+    }
 
     if (assignModeToggle.getToggleState())
     {

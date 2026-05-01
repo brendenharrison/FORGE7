@@ -89,16 +89,8 @@ private:
     juce::ToggleButton assignModeToggle { "Assign" };
     std::unique_ptr<CpuMeter> cpuMeter;
 
-    juce::TextButton viewFitHeight { "Fit H" };
-    juce::TextButton viewFitWidth { "Width" };
-    juce::TextButton viewFitAll { "Fit" };
-    juce::TextButton viewActual100 { "Actual" };
-    juce::ToggleButton panModeToggle { "Pan" };
-
     juce::Slider panXSlider;
     juce::Slider panYSlider;
-    juce::Label panXLabel;
-    juce::Label panYLabel;
 
     /** Owned first so destruction clears canvas -> releases hosted editor before unique_ptr resets. */
     std::unique_ptr<juce::AudioProcessorEditor> embeddedEditor;
@@ -109,8 +101,6 @@ private:
     PluginEditorCanvas pluginEditorCanvas;
 
     ChromeBackgroundBand headerChromeBg;
-    ChromeBackgroundBand viewControlsChromeBg;
-    ChromeBackgroundBand panControlsChromeBg;
     ChromeBackgroundBand footerChromeBg;
 
     juce::Rectangle<int> lastPluginLayoutDiagnosticBounds;

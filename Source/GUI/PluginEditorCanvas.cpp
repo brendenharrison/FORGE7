@@ -12,22 +12,6 @@ constexpr float kFallbackW = 400.0f;
 constexpr float kFallbackH = 300.0f;
 
 juce::Colour canvasBg() noexcept { return juce::Colour(0xff12161c); }
-juce::Colour hudText() noexcept { return juce::Colour(0xffa8aeb8); }
-
-juce::String viewModeLabel(const PluginEditorCanvas::PluginEditorViewMode m)
-{
-    switch (m)
-    {
-        case PluginEditorCanvas::PluginEditorViewMode::ActualSize:
-            return "Actual";
-        case PluginEditorCanvas::PluginEditorViewMode::FitWidth:
-            return "Fit Width";
-        case PluginEditorCanvas::PluginEditorViewMode::FitToScreen:
-            return "Fit";
-        default:
-            return {};
-    }
-}
 
 } // namespace
 
@@ -104,17 +88,6 @@ PluginEditorCanvas::PluginEditorCanvas()
     pluginContentClip.addAndMakeVisible(panBoard);
     panBoard.setInterceptsMouseClicks(true, true);
     panBoard.setPaintingIsUnclipped(false);
-
-    hudLabel.setFont(juce::Font(11.0f));
-    hudLabel.setColour(juce::Label::textColourId, hudText());
-    hudLabel.setJustificationType(juce::Justification::centredLeft);
-    addAndMakeVisible(hudLabel);
-
-    panHintLabel.setFont(juce::Font(11.0f));
-    panHintLabel.setColour(juce::Label::textColourId, hudText().withAlpha(0.85f));
-    panHintLabel.setJustificationType(juce::Justification::centredRight);
-    panHintLabel.setText("Alt/middle-drag to pan", juce::dontSendNotification);
-    addAndMakeVisible(panHintLabel);
 }
 
 PluginEditorCanvas::~PluginEditorCanvas()
@@ -132,9 +105,6 @@ void PluginEditorCanvas::setHostedEditor(juce::AudioProcessorEditor* editor)
         return;
 
     panBoard.addAndMakeVisible(*hostedEditor);
-
-    hudLabel.toFront(false);
-    panHintLabel.toFront(false);
 
     captureNaturalSizeFromEditor();
     applyLayout();
@@ -154,8 +124,15 @@ void PluginEditorCanvas::clearHostedEditor() noexcept
 void PluginEditorCanvas::setViewMode(const PluginEditorViewMode mode)
 {
     viewMode = mode;
-    panX = panY = 0.0f;
+    // Scrollbar 0/0 = top-left for oversized content; clampPan() in applyLayout will center small editors.
+    panX = 0.0f;
+    panY = 0.0f;
     applyLayout();
+}
+
+void PluginEditorCanvas::resetPluginViewToActualSize()
+{
+    setViewMode(PluginEditorViewMode::ActualSize);
 }
 
 void PluginEditorCanvas::setPanMode(const bool enabled)
@@ -188,33 +165,6 @@ void PluginEditorCanvas::captureNaturalSizeFromEditor()
     currentH = h;
 
     layoutPanBoardAndEditor();
-}
-
-int PluginEditorCanvas::viewportWidth() const noexcept
-{
-    auto r = getLocalBounds();
-    if (r.getHeight() <= kHudStripHeight)
-        return 0;
-    r.removeFromBottom(kHudStripHeight);
-    return r.getWidth();
-}
-
-int PluginEditorCanvas::viewportHeight() const noexcept
-{
-    auto r = getLocalBounds();
-    if (r.getHeight() <= kHudStripHeight)
-        return 0;
-    r.removeFromBottom(kHudStripHeight);
-    return r.getHeight();
-}
-
-juce::Rectangle<int> PluginEditorCanvas::getViewportBoundsForContent() const noexcept
-{
-    auto r = getLocalBounds();
-    if (r.getHeight() <= kHudStripHeight)
-        return {};
-    r.removeFromBottom(kHudStripHeight);
-    return r;
 }
 
 juce::Rectangle<int> PluginEditorCanvas::getHostedEditorBoundsInCanvas() const noexcept
@@ -279,16 +229,6 @@ void PluginEditorCanvas::applyLayout()
     applyViewModeToEditorSize();
     layoutPanBoardAndEditor();
     updatePanInterceptLayer();
-
-    hudLabel.setText(getViewHudLine(), juce::dontSendNotification);
-
-    const bool showPanHint = canPanHorizontally() || canPanVertically();
-    panHintLabel.setVisible(showPanHint);
-    if (panMode)
-        panHintLabel.setText("Pan mode: drag to pan", juce::dontSendNotification);
-    else
-        panHintLabel.setText(showPanHint ? "Alt/middle-drag to pan" : "", juce::dontSendNotification);
-
     repaint();
 }
 
@@ -433,14 +373,64 @@ void PluginEditorCanvas::getPanRangeY(float& minYOut, float& maxYOut) const noex
     maxYOut = 0.0f;
 }
 
+float PluginEditorCanvas::getScrollX01() const noexcept
+{
+    float minX = 0.0f, maxX = 0.0f;
+    getPanRangeX(minX, maxX);
+
+    const float span = maxX - minX;
+    if (std::abs(span) < 0.5f)
+        return 0.0f;
+
+    // scroll 0 = panX at maxX (left edge visible); scroll 1 = panX at minX (right edge visible).
+    return juce::jlimit(0.0f, 1.0f, (maxX - panX) / span);
+}
+
+float PluginEditorCanvas::getScrollY01() const noexcept
+{
+    float minY = 0.0f, maxY = 0.0f;
+    getPanRangeY(minY, maxY);
+
+    const float span = maxY - minY;
+    if (std::abs(span) < 0.5f)
+        return 0.0f;
+
+    return juce::jlimit(0.0f, 1.0f, (maxY - panY) / span);
+}
+
+void PluginEditorCanvas::setScrollX01(const float x)
+{
+    float minX = 0.0f, maxX = 0.0f;
+    getPanRangeX(minX, maxX);
+
+    const float t = juce::jlimit(0.0f, 1.0f, x);
+    setPanPosition(maxX + (minX - maxX) * t, panY);
+}
+
+void PluginEditorCanvas::setScrollY01(const float y)
+{
+    float minY = 0.0f, maxY = 0.0f;
+    getPanRangeY(minY, maxY);
+
+    const float t = juce::jlimit(0.0f, 1.0f, y);
+    setPanPosition(panX, maxY + (minY - maxY) * t);
+}
+
+bool PluginEditorCanvas::hostedEditorMayExceedClipping() const noexcept
+{
+    if (hostedEditor == nullptr || hostedEditorIsResizable())
+        return false;
+
+    const auto vp = getViewportBoundsForContent();
+    return currentW > vp.getWidth() || currentH > vp.getHeight();
+}
+
 void PluginEditorCanvas::panBy(const float deltaX, const float deltaY)
 {
     panX += deltaX;
     panY += deltaY;
     clampPan();
     layoutPanBoardAndEditor();
-
-    hudLabel.setText(getViewHudLine(), juce::dontSendNotification);
     repaint();
 }
 
@@ -450,32 +440,12 @@ void PluginEditorCanvas::setPanPosition(const float x, const float y)
     panY = y;
     clampPan();
     layoutPanBoardAndEditor();
-    hudLabel.setText(getViewHudLine(), juce::dontSendNotification);
     repaint();
 }
 
 void PluginEditorCanvas::toggleEncoderPanAxis() noexcept
 {
     encoderPanVertical = !encoderPanVertical;
-}
-
-juce::String PluginEditorCanvas::getViewHudLine() const
-{
-    const auto vp = getViewportBoundsForContent();
-    const juce::String sizeLine = juce::String(currentW) + "x" + juce::String(currentH);
-    const juce::String vpLine = juce::String(vp.getWidth()) + "x" + juce::String(vp.getHeight());
-
-    juce::String line = viewModeLabel(viewMode) + " | Editor " + sizeLine + " | View " + vpLine;
-
-    if (!hostedEditorIsResizable() && viewMode != PluginEditorViewMode::ActualSize)
-        line += " | Fixed-size";
-
-    if (panMode)
-        line += " | Pan mode";
-    else if (canPanHorizontally() || canPanVertically())
-        line += " | Pan";
-
-    return line;
 }
 
 void PluginEditorCanvas::paint(juce::Graphics& g)
@@ -485,17 +455,8 @@ void PluginEditorCanvas::paint(juce::Graphics& g)
 
 void PluginEditorCanvas::resized()
 {
-    auto r = getLocalBounds();
-    auto hudRow = r.removeFromBottom(kHudStripHeight);
-    hudLabel.setBounds(hudRow.removeFromLeft(juce::jmax(160, hudRow.getWidth() / 2)).reduced(6, 2));
-    panHintLabel.setBounds(hudRow.reduced(6, 2));
-
-    pluginContentClip.setBounds(r);
-
+    pluginContentClip.setBounds(getLocalBounds());
     applyLayout();
-
-    hudLabel.toFront(false);
-    panHintLabel.toFront(false);
 }
 
 void PluginEditorCanvas::updatePanInterceptLayer()
