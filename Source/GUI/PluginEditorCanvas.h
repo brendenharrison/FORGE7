@@ -7,6 +7,7 @@
 namespace juce
 {
 class AudioProcessorEditor;
+class PluginDescription;
 }
 
 namespace forge7
@@ -46,6 +47,27 @@ public:
         FitWidth,
     };
 
+    /** Higher-level sizing intent applied when the hosted editor is attached or the viewport changes.
+
+        Conservative by default: legacy editors and editors that do not declare
+        `AudioProcessorEditor::isResizable()` are never stretched. */
+    enum class PluginEditorSizingMode
+    {
+        /** Use the editor's natural / preferred size and centre it inside the viewport.
+
+            Pan/scroll engages when the editor is larger than the viewport. **Never resizes the editor.** */
+        NativeSizeCentered,
+
+        /** Resize the editor to the viewport only when `isResizable()` is true, applying
+            the editor's `getConstrainer()` if one is provided. Otherwise behaves like `NativeSizeCentered`. */
+        FitIfResizable,
+
+        /** Force resize to the viewport regardless of `isResizable()`. **Off by default**;
+            intended only for explicitly known-safe editors (e.g. bench testing). Vendor GUIs
+            that draw via native subviews / OpenGL can break in this mode. */
+        FillViewportForKnownSafeEditors,
+    };
+
     PluginEditorCanvas();
     ~PluginEditorCanvas() override;
 
@@ -57,6 +79,24 @@ public:
 
     void setViewMode(PluginEditorViewMode mode);
     PluginEditorViewMode getViewMode() const noexcept { return viewMode; }
+
+    /** Sets the policy used the next time the editor is attached or the viewport changes.
+
+        Default is `NativeSizeCentered`. Internally maps to a compatible `PluginEditorViewMode`. */
+    void setSizingMode(PluginEditorSizingMode mode);
+    PluginEditorSizingMode getSizingMode() const noexcept { return sizingMode; }
+
+    /** Optional format hint that tightens sizing decisions for legacy plugins.
+
+        Stored for diagnostics + sizing safeguards (e.g. VST2 / "VST" stays `NativeSizeCentered`
+        unless the editor itself is resizable). Pass before / immediately after `setHostedEditor`. */
+    void setPluginDescriptionForSizing(const juce::PluginDescription& description);
+
+    juce::String getPluginFormatNameForDiagnostics() const noexcept { return pluginFormatNameForDiagnostics; }
+    juce::String getPluginDisplayNameForDiagnostics() const noexcept { return pluginDisplayNameForDiagnostics; }
+
+    /** True when the resolved sizing policy considers `setSize` on the hosted editor safe. */
+    bool isResizableUnderCurrentPolicy() const noexcept;
 
     /** Reset to ActualSize (the V1 default for fixed-size vendor GUIs); centers small editors,
         positions oversized editors at the top-left so scrollbars start at 0/0 like a web page. */
@@ -151,6 +191,15 @@ private:
     int currentH { 500 };
 
     PluginEditorViewMode viewMode { PluginEditorViewMode::ActualSize };
+    PluginEditorSizingMode sizingMode { PluginEditorSizingMode::NativeSizeCentered };
+
+    /** Format name (e.g. "VST3", "VST", "AudioUnit") cached for sizing safeguards + DBG. */
+    juce::String pluginFormatNameForDiagnostics;
+    juce::String pluginDisplayNameForDiagnostics;
+
+    /** Whitelisted format hint allows the FillViewportForKnownSafeEditors mode to actually fill;
+        otherwise we downgrade to FitIfResizable for safety on unknown/legacy plugins. */
+    bool descriptionAllowsForcedFill { false };
 
     float panX { 0.0f };
     float panY { 0.0f };

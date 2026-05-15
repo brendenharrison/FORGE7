@@ -15,6 +15,13 @@ option(FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW
        "Enable simulated hardware controls for desktop development"
        ON)
 
+# Off by default. When ON, builds an experimental platform-specific heavyweight overlay path
+# inside the fullscreen plugin editor. Production fix for native-plugin-bleed is layout-based;
+# this flag exists only for ad-hoc debug builds and must not be relied on in shipped builds.
+option(FORGE7_EXPERIMENTAL_NATIVE_PLUGIN_OVERLAY
+       "Enable experimental heavyweight overlay above hosted plugin editors (DEBUG ONLY, default OFF)"
+       OFF)
+
 add_subdirectory(Source)
 
 include(FetchContent)
@@ -81,6 +88,7 @@ target_compile_definitions(Forge7 PRIVATE
     # Required for VST3 format registration in AudioPluginFormatManager::addDefaultFormats().
     JUCE_PLUGINHOST_VST3=1
     FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW=$<BOOL:${FORGE7_ENABLE_SIMULATED_HARDWARE_WINDOW}>
+    FORGE7_EXPERIMENTAL_NATIVE_PLUGIN_OVERLAY=$<BOOL:${FORGE7_EXPERIMENTAL_NATIVE_PLUGIN_OVERLAY}>
 )
 
 # Optional dev-only guard: ensure no non-ASCII characters exist in Source/ (prevents mojibake regressions).

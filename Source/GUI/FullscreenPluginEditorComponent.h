@@ -103,6 +103,13 @@ private:
     ChromeBackgroundBand headerChromeBg;
     ChromeBackgroundBand footerChromeBg;
 
+    /** Dedicated plugin viewport rectangle as resolved by the most recent `resized()` pass.
+
+        This is the only region into which the hosted plugin editor is laid out. All Forge chrome
+        (header, footer, scrollbars, Assign inspector) is laid out outside this rectangle so the
+        plugin's native child surface cannot end up over critical host controls. */
+    juce::Rectangle<int> currentPluginViewportBounds;
+
     juce::Rectangle<int> lastPluginLayoutDiagnosticBounds;
 
     juce::Label assignHintLabel;

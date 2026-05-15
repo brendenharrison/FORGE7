@@ -115,11 +115,9 @@ FullscreenPluginEditorComponent::FullscreenPluginEditorComponent(AppContext& con
     assignModeToggle.setColour(juce::ToggleButton::tickColourId, accent());
     assignModeToggle.onClick = [this]()
     {
-        parameterList.setVisible(assignModeToggle.getToggleState());
-        assignHintLabel.setVisible(assignModeToggle.getToggleState());
+        // Visibility of the assign hint + parameter list is owned by `resized()` (right inspector strip).
         resized();
         syncEncoderFocus();
-        bringChromeToFront();
 
         if (appContext.parameterMappingManager != nullptr && !assignModeToggle.getToggleState())
             appContext.parameterMappingManager->cancelKnobAssignmentLearn();
@@ -260,9 +258,26 @@ void FullscreenPluginEditorComponent::timerCallback()
 
 void FullscreenPluginEditorComponent::resized()
 {
+    // Layout-first solution to the "native plugin surface paints over Forge controls" bug:
+    //
+    //   1. Header / footer / Assign inspector / scrollbars are sibling rectangles of the plugin
+    //      viewport. None of them intersect `currentPluginViewportBounds`, so the hosted editor's
+    //      native child window cannot end up geometrically over any host control.
+    //   2. The footer height is constant - it never grows when Assign turns on. Variable-height
+    //      footers used to share an edge with the plugin viewport, which is the worst-case region
+    //      for native bleed (HWND/NSView overdraw, OpenGL surfaces, etc.).
+    //   3. Assign mode reveals a right-side inspector strip outside the viewport instead, so the
+    //      plugin viewport simply shrinks horizontally.
     auto area = getLocalBounds().reduced(10, 8);
 
-    const auto headerBand = area.removeFromTop(48);
+    constexpr int kHeaderH = 48;
+    constexpr int kFooterH = 108;
+    constexpr int kAssignInspectorW = 320;
+    constexpr int kScrollbarThickness = 20;
+    constexpr int kHeaderToWorkspaceGap = 6;
+    constexpr int kInspectorToViewportGap = 8;
+
+    const auto headerBand = area.removeFromTop(kHeaderH);
     headerChromeBg.setBounds(headerBand);
 
     auto top = headerBand;
@@ -282,10 +297,10 @@ void FullscreenPluginEditorComponent::resized()
     top.removeFromRight(8);
     titleLabel.setBounds(top);
 
-    area.removeFromTop(6);
+    area.removeFromTop(kHeaderToWorkspaceGap);
 
-    // Footer (assign mode expands it; assign list/hint live inside this band, never overlapping the workspace).
-    const auto footerBand = area.removeFromBottom(assignModeToggle.getToggleState() ? 220 : 108);
+    // Fixed-height footer band - host chrome anchors here regardless of Assign mode.
+    const auto footerBand = area.removeFromBottom(kFooterH);
     footerChromeBg.setBounds(footerBand);
 
     auto footer = footerBand;
@@ -301,14 +316,23 @@ void FullscreenPluginEditorComponent::resized()
     for (int i = 0; i < 2; ++i)
         assignMappingLabels[static_cast<size_t>(i)].setBounds(strip.removeFromLeft(sixth).reduced(4, 0));
 
-    if (assignModeToggle.getToggleState())
+    // Right-side Assign inspector. Sibling of the plugin viewport, never on top of it.
+    const bool assignActive = assignModeToggle.getToggleState();
+
+    if (assignActive)
     {
-        assignHintLabel.setBounds(footer.removeFromTop(22));
-        parameterList.setBounds(footer);
+        auto inspector = area.removeFromRight(kAssignInspectorW);
+        inspector.removeFromLeft(kInspectorToViewportGap);
+
+        assignHintLabel.setBounds(inspector.removeFromTop(22));
+        inspector.removeFromTop(4);
+        parameterList.setBounds(inspector);
     }
 
+    assignHintLabel.setVisible(assignActive);
+    parameterList.setVisible(assignActive);
+
     // Horizontal scrollbar directly above the footer; vertical along the right of the workspace.
-    constexpr int kScrollbarThickness = 20;
     const auto hScrollBand = area.removeFromBottom(kScrollbarThickness);
     panXSlider.setBounds(hScrollBand);
 
@@ -316,42 +340,32 @@ void FullscreenPluginEditorComponent::resized()
     const auto vScrollBand = pluginWorkspace.removeFromRight(kScrollbarThickness);
     panYSlider.setBounds(vScrollBand);
 
-    // Remaining region is the vendor GUI only; no overlap with header, scrollbars, or footer.
-    pluginViewportFrame.setBounds(pluginWorkspace);
+    // Guardrail: never collapse the plugin viewport to <1x1 - some plugin peers crash on 0-sized parents.
+    currentPluginViewportBounds = pluginWorkspace;
+    const auto safeViewport = currentPluginViewportBounds.withSize(juce::jmax(1, currentPluginViewportBounds.getWidth()),
+                                                                    juce::jmax(1, currentPluginViewportBounds.getHeight()));
+
+    pluginViewportFrame.setBounds(safeViewport);
     pluginEditorCanvas.setBounds(pluginViewportFrame.getLocalBounds());
 
     scheduleDeferredEditorHostReconcile();
     refreshPanControlsFromCanvas();
-    bringChromeToFront();
+
+    // With non-overlapping geometry, JUCE z-order between sibling chrome components is irrelevant
+    // for correctness; we still nudge the viewport frame toBack() so any future near-edge chrome
+    // paints above it without a flicker. Crucially, we no longer rely on toFront() to beat native
+    // plugin surfaces - that approach does not work for HWND / NSView / X11 plugin children.
+    pluginViewportFrame.toBack();
 }
 
 void FullscreenPluginEditorComponent::bringChromeToFront()
 {
+    // The production fix is layout-based: chrome rectangles do not intersect the plugin viewport,
+    // so JUCE z-order between sibling components is sufficient for paint correctness. We keep this
+    // helper as a thin nudge that pushes the viewport frame toBack() (no toFront() spam) - native
+    // plugin peers will draw above their JUCE parent regardless of toFront() / toBack(), which is
+    // why geometry must not overlap in the first place.
     pluginViewportFrame.toBack();
-
-    headerChromeBg.toFront(false);
-    footerChromeBg.toFront(false);
-
-    backButton.toFront(false);
-    titleLabel.toFront(false);
-    sceneVarLabel.toFront(false);
-
-    if (cpuMeter != nullptr)
-        cpuMeter->toFront(false);
-
-    assignModeToggle.toFront(false);
-    panXSlider.toFront(false);
-    panYSlider.toFront(false);
-    assignHintLabel.toFront(false);
-    parameterList.toFront(false);
-
-    for (auto& l : knobMappingLabels)
-        l.toFront(false);
-
-    for (auto& l : assignMappingLabels)
-        l.toFront(false);
-
-    closeButton.toFront(false);
 }
 
 void FullscreenPluginEditorComponent::scheduleDeferredEditorHostReconcile()
@@ -369,6 +383,14 @@ void FullscreenPluginEditorComponent::performDeferredEditorHostReconcile()
 
     logPluginEditorLayoutDiagnosticsIfChanged();
     bringChromeToFront();
+
+#if FORGE7_EXPERIMENTAL_NATIVE_PLUGIN_OVERLAY
+    // Off by default. Intentional no-op stub for an experimental platform-specific heavyweight
+    // overlay (e.g. NSWindow / HWND child added above the hosted plugin's native surface for
+    // temporary debug HUDs). The production fix is layout-based; do not rely on this flag in
+    // shipped builds. Kept here as the integration point if a debug-only experiment is needed.
+    static_assert(true, "FORGE7_EXPERIMENTAL_NATIVE_PLUGIN_OVERLAY enabled but no stub implementation provided");
+#endif
 }
 
 bool FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
@@ -376,6 +398,9 @@ bool FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
     if (embeddedEditor != nullptr || hostedInstanceForEditor == nullptr)
         return false;
 
+    // Wait until the viewport has real size; on first layout `resized()` may run before the
+    // window has its final bounds. Attaching at <12px would just churn pluginEditor->setSize(0,0)
+    // for some peers (guardrail against resize loops + degenerate bounds).
     if (pluginViewportFrame.getWidth() < 12 || pluginViewportFrame.getHeight() < 12)
         return false;
 
@@ -387,8 +412,21 @@ bool FullscreenPluginEditorComponent::tryAttachEmbeddedEditorIfNeeded()
     if (embeddedEditor == nullptr)
         embeddedEditor = std::make_unique<juce::GenericAudioProcessorEditor>(*hostedInstanceForEditor);
 
+    // Inform the canvas of plugin format / display name before attaching; this drives the
+    // conservative `PluginEditorSizingMode` defaults (e.g. legacy VST2 stays NativeSizeCentered).
+    pluginEditorCanvas.setPluginDescriptionForSizing(hostedInstanceForEditor->getPluginDescription());
     pluginEditorCanvas.setHostedEditor(embeddedEditor.get());
     refreshPanControlsFromCanvas();
+
+    DBG("FORGE7 FullscreenPlugin: attached editor"
+        << " plugin=" << hostedInstanceForEditor->getPluginDescription().name
+        << " format=" << hostedInstanceForEditor->getPluginDescription().pluginFormatName
+        << " naturalSize=" << pluginEditorCanvas.getNaturalEditorWidth()
+        << "x" << pluginEditorCanvas.getNaturalEditorHeight()
+        << " viewport=" << currentPluginViewportBounds.toString()
+        << " sizingMode=" << static_cast<int>(pluginEditorCanvas.getSizingMode())
+        << " policyAllowsResize=" << (pluginEditorCanvas.isResizableUnderCurrentPolicy() ? "yes" : "no"));
+
     return true;
 }
 
@@ -424,14 +462,26 @@ void FullscreenPluginEditorComponent::logPluginEditorLayoutDiagnosticsIfChanged(
 
     const auto editorInCanvas = pluginEditorCanvas.getHostedEditorBoundsInCanvas();
 
-    Logger::info("FORGE7 FullscreenPlugin: fullscreen=" + getBounds().toString() + " natural="
-                 + juce::String(pluginEditorCanvas.getNaturalEditorWidth()) + "x"
-                 + juce::String(pluginEditorCanvas.getNaturalEditorHeight()) + " viewportFrame=" + vp.toString()
-                 + " canvas=" + pluginEditorCanvas.getBounds().toString() + " editorInCanvas=" + editorInCanvas.toString()
-                 + " viewMode=" + modeStr + " pan=(" + juce::String(pluginEditorCanvas.getPanX(), 1) + ","
-                 + juce::String(pluginEditorCanvas.getPanY(), 1) + ")"
-                 + " "
-                 + pluginEditorCanvas.describeHostedEditorLayoutForDiagnostics());
+    const juce::String diag =
+        "FORGE7 FullscreenPlugin:"
+        " fullscreen=" + getBounds().toString()
+        + " plugin=" + pluginEditorCanvas.getPluginDisplayNameForDiagnostics()
+        + " format=" + pluginEditorCanvas.getPluginFormatNameForDiagnostics()
+        + " natural=" + juce::String(pluginEditorCanvas.getNaturalEditorWidth()) + "x"
+        + juce::String(pluginEditorCanvas.getNaturalEditorHeight())
+        + " pluginViewportBounds=" + currentPluginViewportBounds.toString()
+        + " viewportFrame=" + vp.toString()
+        + " canvas=" + pluginEditorCanvas.getBounds().toString()
+        + " editorInCanvas=" + editorInCanvas.toString()
+        + " sizingMode=" + juce::String(static_cast<int>(pluginEditorCanvas.getSizingMode()))
+        + " policyAllowsResize=" + (pluginEditorCanvas.isResizableUnderCurrentPolicy() ? "yes" : "no")
+        + " viewMode=" + modeStr
+        + " pan=(" + juce::String(pluginEditorCanvas.getPanX(), 1) + ","
+        + juce::String(pluginEditorCanvas.getPanY(), 1) + ")"
+        + " " + pluginEditorCanvas.describeHostedEditorLayoutForDiagnostics();
+
+    Logger::info(diag);
+    DBG(diag);
 
     // Heads-up for the macOS/Windows native cases where a hosted child window may draw outside
     // pluginViewportFrame regardless of JUCE clipping. Layout above guarantees the frame itself

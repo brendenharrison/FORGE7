@@ -11,7 +11,20 @@ namespace
 constexpr float kFallbackW = 400.0f;
 constexpr float kFallbackH = 300.0f;
 
+constexpr int kMinReasonableEditorDim = 50;
+constexpr int kMaxReasonableEditorDim = 8000;
+
 juce::Colour canvasBg() noexcept { return juce::Colour(0xff12161c); }
+
+bool formatNameIsKnownVst3(const juce::String& formatName) noexcept
+{
+    return formatName.equalsIgnoreCase("VST3");
+}
+
+bool formatNameIsLegacyVst2(const juce::String& formatName) noexcept
+{
+    return formatName.equalsIgnoreCase("VST");
+}
 
 } // namespace
 
@@ -98,6 +111,8 @@ PluginEditorCanvas::~PluginEditorCanvas()
 
 void PluginEditorCanvas::setHostedEditor(juce::AudioProcessorEditor* editor)
 {
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
     clearHostedEditor();
     hostedEditor = editor;
 
@@ -108,10 +123,20 @@ void PluginEditorCanvas::setHostedEditor(juce::AudioProcessorEditor* editor)
 
     captureNaturalSizeFromEditor();
     applyLayout();
+
+    DBG("FORGE7 PluginEditorCanvas: attached"
+        << " plugin=" << pluginDisplayNameForDiagnostics
+        << " format=" << pluginFormatNameForDiagnostics
+        << " natural=" << naturalW << "x" << naturalH
+        << " resizable=" << (hostedEditorIsResizable() ? "yes" : "no")
+        << " sizingMode=" << static_cast<int>(sizingMode)
+        << " viewMode=" << static_cast<int>(viewMode));
 }
 
 void PluginEditorCanvas::clearHostedEditor() noexcept
 {
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
     if (hostedEditor != nullptr)
     {
         panBoard.removeChildComponent(hostedEditor);
@@ -123,11 +148,57 @@ void PluginEditorCanvas::clearHostedEditor() noexcept
 
 void PluginEditorCanvas::setViewMode(const PluginEditorViewMode mode)
 {
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
     viewMode = mode;
     // Scrollbar 0/0 = top-left for oversized content; clampPan() in applyLayout will center small editors.
     panX = 0.0f;
     panY = 0.0f;
     applyLayout();
+}
+
+void PluginEditorCanvas::setSizingMode(const PluginEditorSizingMode mode)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
+    sizingMode = mode;
+
+    // Map the high-level intent onto the existing internal view-mode implementation. We keep
+    // the sizingMode policy field so that applyViewModeToEditorSize() can still gate "force fill"
+    // on top of the resizable check.
+    switch (sizingMode)
+    {
+        case PluginEditorSizingMode::NativeSizeCentered:
+            setViewMode(PluginEditorViewMode::ActualSize);
+            break;
+        case PluginEditorSizingMode::FitIfResizable:
+        case PluginEditorSizingMode::FillViewportForKnownSafeEditors:
+            setViewMode(PluginEditorViewMode::FitToScreen);
+            break;
+    }
+}
+
+void PluginEditorCanvas::setPluginDescriptionForSizing(const juce::PluginDescription& description)
+{
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
+    pluginFormatNameForDiagnostics = description.pluginFormatName;
+    pluginDisplayNameForDiagnostics = description.name;
+
+    // Phase 1 allowlist: only known-VST3 editors are even eligible for forced-fill behavior.
+    // VST2 / other legacy formats stay on the safe path regardless of the requested sizing mode.
+    descriptionAllowsForcedFill = formatNameIsKnownVst3(pluginFormatNameForDiagnostics);
+}
+
+bool PluginEditorCanvas::isResizableUnderCurrentPolicy() const noexcept
+{
+    if (hostedEditor == nullptr)
+        return false;
+
+    if (sizingMode == PluginEditorSizingMode::FillViewportForKnownSafeEditors && descriptionAllowsForcedFill)
+        return true;
+
+    return hostedEditor->isResizable();
 }
 
 void PluginEditorCanvas::resetPluginViewToActualSize()
@@ -147,22 +218,25 @@ void PluginEditorCanvas::setPanMode(const bool enabled)
 
 void PluginEditorCanvas::captureNaturalSizeFromEditor()
 {
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
     if (hostedEditor == nullptr)
         return;
 
     int w = hostedEditor->getWidth();
     int h = hostedEditor->getHeight();
 
-    if (w < 50 || h < 50 || w > 8000 || h > 8000)
+    if (w < kMinReasonableEditorDim || h < kMinReasonableEditorDim
+        || w > kMaxReasonableEditorDim || h > kMaxReasonableEditorDim)
     {
         w = static_cast<int>(kFallbackW);
         h = static_cast<int>(kFallbackH);
     }
 
-    naturalW = w;
-    naturalH = h;
-    currentW = w;
-    currentH = h;
+    naturalW = juce::jmax(1, w);
+    naturalH = juce::jmax(1, h);
+    currentW = naturalW;
+    currentH = naturalH;
 
     layoutPanBoardAndEditor();
 }
@@ -216,12 +290,16 @@ void PluginEditorCanvas::layoutPanBoardAndEditor()
     if (hostedEditor == nullptr)
         return;
 
-    hostedEditor->setBounds(0, 0, currentW, currentH);
+    // Guardrail: never collapse the hosted editor or panBoard to <1x1; some plugin peers crash on 0-sized parents.
+    const int safeW = juce::jmax(1, currentW);
+    const int safeH = juce::jmax(1, currentH);
+
+    hostedEditor->setBounds(0, 0, safeW, safeH);
 
     panBoard.setBounds(juce::roundToInt(panX),
                        juce::roundToInt(panY),
-                       currentW,
-                       currentH);
+                       safeW,
+                       safeH);
 }
 
 void PluginEditorCanvas::applyLayout()
@@ -266,6 +344,8 @@ void PluginEditorCanvas::panWithEncoderDetents(const int deltaSteps)
 
 void PluginEditorCanvas::applyViewModeToEditorSize()
 {
+    jassert(juce::MessageManager::getInstance()->isThisTheMessageThread());
+
     if (hostedEditor == nullptr)
         return;
 
@@ -273,49 +353,71 @@ void PluginEditorCanvas::applyViewModeToEditorSize()
     const int vw = juce::jmax(1, content.getWidth());
     const int vh = juce::jmax(1, content.getHeight());
 
-    // In V1, we never apply affine transforms to native plugin editors. We only attempt to resize
-    // editors that explicitly support host resizing; otherwise we keep natural size and rely on panning.
+    // We never apply affine transforms to native plugin editors. We only attempt to resize editors
+    // that explicitly support host resizing (or are explicitly opted in via FillViewportForKnownSafeEditors);
+    // otherwise we keep natural size and rely on panning. This matches the conservative default
+    // documented in PluginEditorSizingMode.
+    const bool mayResizeEditor = isResizableUnderCurrentPolicy();
+    const char* outcome = "native";
+
     if (viewMode == PluginEditorViewMode::ActualSize)
     {
-        currentW = naturalW;
-        currentH = naturalH;
-        hostedEditor->setSize(currentW, currentH);
-        currentW = hostedEditor->getWidth();
-        currentH = hostedEditor->getHeight();
+        // Reapply the editor's natural size in case it was previously fitted; do this in a single pass
+        // so resizable plugins notify their constrainer once, never in a loop.
+        hostedEditor->setSize(juce::jmax(1, naturalW), juce::jmax(1, naturalH));
+        currentW = juce::jmax(1, hostedEditor->getWidth());
+        currentH = juce::jmax(1, hostedEditor->getHeight());
+        outcome = "native";
     }
     else if (viewMode == PluginEditorViewMode::FitToScreen)
     {
-        if (hostedEditorIsResizable())
+        if (mayResizeEditor)
         {
             hostedEditor->setSize(vw, vh);
-            currentW = hostedEditor->getWidth();
-            currentH = hostedEditor->getHeight();
+            currentW = juce::jmax(1, hostedEditor->getWidth());
+            currentH = juce::jmax(1, hostedEditor->getHeight());
+            outcome = "fit";
         }
         else
         {
-            currentW = naturalW;
-            currentH = naturalH;
+            currentW = juce::jmax(1, naturalW);
+            currentH = juce::jmax(1, naturalH);
+            outcome = "native_fallback";
         }
     }
     else if (viewMode == PluginEditorViewMode::FitWidth)
     {
-        if (hostedEditorIsResizable())
+        if (mayResizeEditor)
         {
             // Keep aspect-ish by scaling height proportionally to natural size, but still allow constrainer.
             const float aspect = naturalH > 0 ? (static_cast<float>(naturalH) / static_cast<float>(naturalW)) : 0.75f;
             const int targetH = juce::jmax(1, juce::roundToInt(static_cast<float>(vw) * aspect));
             hostedEditor->setSize(vw, targetH);
-            currentW = hostedEditor->getWidth();
-            currentH = hostedEditor->getHeight();
+            currentW = juce::jmax(1, hostedEditor->getWidth());
+            currentH = juce::jmax(1, hostedEditor->getHeight());
+            outcome = "fitWidth";
         }
         else
         {
-            currentW = naturalW;
-            currentH = naturalH;
+            currentW = juce::jmax(1, naturalW);
+            currentH = juce::jmax(1, naturalH);
+            outcome = "native_fallback";
         }
     }
 
     clampPan();
+
+    DBG("FORGE7 PluginEditorCanvas: applyViewModeToEditorSize"
+        << " plugin=" << pluginDisplayNameForDiagnostics
+        << " format=" << pluginFormatNameForDiagnostics
+        << " viewport=" << vw << "x" << vh
+        << " natural=" << naturalW << "x" << naturalH
+        << " current=" << currentW << "x" << currentH
+        << " sizingMode=" << static_cast<int>(sizingMode)
+        << " viewMode=" << static_cast<int>(viewMode)
+        << " resizable=" << (hostedEditor->isResizable() ? "yes" : "no")
+        << " policyAllowsResize=" << (mayResizeEditor ? "yes" : "no")
+        << " outcome=" << outcome);
 }
 
 void PluginEditorCanvas::clampPan()
@@ -418,7 +520,7 @@ void PluginEditorCanvas::setScrollY01(const float y)
 
 bool PluginEditorCanvas::hostedEditorMayExceedClipping() const noexcept
 {
-    if (hostedEditor == nullptr || hostedEditorIsResizable())
+    if (hostedEditor == nullptr || isResizableUnderCurrentPolicy())
         return false;
 
     const auto vp = getViewportBoundsForContent();
